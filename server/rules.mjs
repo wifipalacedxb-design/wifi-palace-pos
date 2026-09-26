@@ -1,4 +1,4 @@
-import {hash,audit} from './store.mjs';
+import {hash,audit,nextNumber,documentNumber} from './store.mjs';
 import {ApiError,fail,text,required,amount,image,get} from './check.mjs';
 import {businessModule,kindsFor,CORE_OWNER_KINDS} from './modules.mjs';
 export {ApiError};
@@ -15,7 +15,7 @@ function validate(db,u,kind,key,data,old){
   return{id:key,name:required(data.name,100),phone:text(data.phone,40),dob};
  }
  if(kind==='sales'){
-  if(old){if(u.role!=='owner')fail('Only the salon owner can refund a sale',403);if(old.status!=='Paid'||data.status!=='Refunded')fail('Saved sales cannot be edited',409);return{...old,status:'Refunded',refundReason:required(data.refundReason,500),refundDate:new Date().toISOString(),refundedBy:u.id};}
+  if(old){if(u.role!=='owner')fail('Only the salon owner can refund a sale',403);if(old.status!=='Paid'||data.status!=='Refunded')fail('Saved sales cannot be edited',409);return{...old,status:'Refunded',refundReason:required(data.refundReason,500),refundDate:new Date().toISOString(),refundedBy:u.id,creditNote:documentNumber('CN',nextNumber(db,salon,'credit-note'))};}
   if(data.status!=='Paid'||!Array.isArray(data.items)||data.items.length<1||data.items.length>100)fail('Invalid sale');
   const shop=get(db,salon,'settings','singleton');
   const items=data.items.map(i=>{const service=get(db,salon,mod.catalogKind,i.id);if(!service)fail('A service was removed. Review this pending bill.',409);if(i.price!==service.price)fail('A service price changed. Review this pending bill.',409);if(!Number.isInteger(i.qty)||i.qty<1||i.qty>100)fail('Invalid service quantity');return{...service,qty:i.qty}});
@@ -31,7 +31,8 @@ function validate(db,u,kind,key,data,old){
   const customerId=text(data.customerId,100),customer=customerId?get(db,salon,'customers',customerId):null;if(customerId&&!customer)fail('Customer must sync before their sale',409);
   let commission={};
   if(data.staffId){const stylist=get(db,salon,'staff',data.staffId);if(!stylist)fail('Stylist no longer exists',409);const rate=stylist.commissionBps||0;if(data.commissionBps!==rate)fail('Stylist commission changed. Review this pending sale.',409);commission={staffId:stylist.id,commissionBps:rate,commissionAmount:Math.round((sub-off)*rate/10000)};}
-  return {...commission,id:key,number:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
+  // The tax invoice number is issued here, in upload order, so numbers are sequential with no gaps even when bills were made offline.
+  return {...commission,id:key,number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:shop.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
  }
  fail('Unknown record type');
 }

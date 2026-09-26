@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS records(business_id TEXT NOT NULL REFERENCES businesses(id),kind TEXT NOT NULL,id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT,PRIMARY KEY(business_id,kind,id));
 CREATE TABLE IF NOT EXISTS operations(business_id TEXT NOT NULL,user_id TEXT NOT NULL,id TEXT NOT NULL,digest TEXT NOT NULL,result TEXT NOT NULL,PRIMARY KEY(business_id,id));
 CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY AUTOINCREMENT,business_id TEXT NOT NULL,user_id TEXT NOT NULL,action TEXT NOT NULL,entity TEXT NOT NULL,at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS counters(business_id TEXT NOT NULL REFERENCES businesses(id),name TEXT NOT NULL,value INTEGER NOT NULL,PRIMARY KEY(business_id,name));
 CREATE TABLE IF NOT EXISTS login_attempts(key TEXT PRIMARY KEY,count INTEGER NOT NULL,until INTEGER NOT NULL);
 `);return db;}
 export const initial=(name,type='salon')=>({version:1,vendor:{logo:''},settings:{name,phone:'',address:'',trn:'',tax:0,logo:''},staff:[],customers:[],sales:[],...businessModule(type).seed(name)});
@@ -27,4 +28,7 @@ export async function createBusiness(db,{name,slug,email,owner,password,type}){t
 export const createSalon=createBusiness;
 export function snapshot(db,salon){const type=businessTypeOf(db,salon),state={version:1,type},revisions={};for(const kind of kindsFor(type))if(!['settings','vendor'].includes(kind))state[kind]=[];for(const row of db.prepare('SELECT kind,id,version,data FROM records WHERE business_id=? ORDER BY rowid').all(salon)){revisions[row.kind+':'+row.id]=row.version;if(row.data===null)continue;const data=JSON.parse(row.data);if(Array.isArray(state[row.kind]))state[row.kind].push(data);else state[row.kind]=data;}return {state,revisions,serverTime:new Date().toISOString()};}
 export function audit(db,user,action,entity){db.prepare('INSERT INTO audit(business_id,user_id,action,entity,at) VALUES (?,?,?,?,?)').run(user.business_id,user.id,action,entity,new Date().toISOString());}
+// Next number in a per-business sequence (tax invoices, credit notes). Call inside the caller's transaction.
+export function nextNumber(db,business,name){return db.prepare('INSERT INTO counters(business_id,name,value) VALUES (?,?,1) ON CONFLICT(business_id,name) DO UPDATE SET value=value+1 RETURNING value').get(business,name).value}
+export const documentNumber=(prefix,n)=>prefix+'-'+String(n).padStart(6,'0');
 export async function backupTo(db,path){return backup(db,path);}
