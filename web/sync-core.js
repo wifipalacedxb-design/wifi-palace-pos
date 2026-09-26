@@ -1,8 +1,8 @@
 (function(root){
  const clone=x=>JSON.parse(JSON.stringify(x));
  // Upload order matters: people and catalogue records before the bookings and sales that refer to them.
- const FIRST=['settings','vendor','staff','customers'],LAST=['sales'];
- const kindsOf=(...states)=>{const lists=states.flatMap(s=>Object.keys(s||{}).filter(k=>Array.isArray(s[k])));return [...new Set([...FIRST,...lists.filter(k=>!FIRST.includes(k)&&!LAST.includes(k)),...LAST])]};
+ const FIRST=['settings','vendor','staff','customers'],LAST=['sales'],AFTER_SALES=['gym_memberships','gym_pt'];
+ const kindsOf=(...states)=>{const lists=states.flatMap(s=>Object.keys(s||{}).filter(k=>Array.isArray(s[k])));return [...new Set([...FIRST,...lists.filter(k=>!FIRST.includes(k)&&!LAST.includes(k)&&!AFTER_SALES.includes(k)),...LAST,...AFTER_SALES.filter(k=>lists.includes(k))])]};
  const records=(state,kind,list=Array.isArray(state[kind]))=>list?Object.fromEntries((state[kind]||[]).map(x=>[x.id,x])):{singleton:state[kind]||{logo:''}};
  function apply(state,op){if(Array.isArray(state[op.kind])){const i=state[op.kind].findIndex(x=>x.id===op.key);if(op.data===null){if(i>=0)state[op.kind].splice(i,1)}else if(i>=0)state[op.kind][i]=clone(op.data);else state[op.kind].push(clone(op.data))}else if(op.data!==null)state[op.kind]=clone(op.data);return state}
  function project(cache){const state=clone(cache.base);for(const op of cache.pending)apply(state,{...op,data:op.action==='delete'?null:op.data});return state}

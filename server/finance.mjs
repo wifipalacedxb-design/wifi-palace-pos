@@ -38,14 +38,16 @@ export function staffReport(db,business,from,to){
   const sold=inRange(sale.date),refunded=sale.status==='Refunded'&&inRange(sale.refundDate);if(!sold&&!refunded)continue;
   const byUser=!sale.staffId&&sale.createdBy&&users.has(sale.createdBy);
   const key=sale.staffId?'id:'+sale.staffId:byUser?'user:'+sale.createdBy:'legacy:'+(sale.staff||'Unassigned');
-  let row=rows.get(key);if(!row){row={id:key,name:byUser?users.get(sale.createdBy):sale.staff||'Unassigned',legacy:!sale.staffId&&!byUser,bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,details:[]};rows.set(key,row);}
+  let row=rows.get(key);if(!row){row={id:key,name:byUser?users.get(sale.createdBy):sale.staff||'Unassigned',legacy:!sale.staffId&&!byUser,bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,sessions:0,details:[]};rows.set(key,row);}
   const value=sale.sub-sale.off,lines=sale.items.map(i=>i.name+' × '+i.qty).join('; ');
   if(sold){row.bills++;row.services+=sale.items.reduce((n,i)=>n+(i.unit==='kg'?1:i.qty),0);row.gross+=sale.sub;row.discounts+=sale.off;row.net+=value;row.details.push({id:sale.id,number:sale.number,date:sale.date,type:'Sale',customer:sale.customer,services:lines,method:sale.method,beforeTax:value,total:sale.total});}
   if(refunded){row.refunds+=value;row.net-=value;row.details.push({id:sale.id,number:sale.number,date:sale.refundDate,type:'Refund',customer:sale.customer,services:lines,method:sale.method,beforeTax:-value,total:-sale.total});}
  }
+ // Gyms: personal-training sessions delivered, credited to the trainer who ran each session.
+ for(const row of db.prepare("SELECT data FROM records WHERE business_id=? AND kind='gym_pt' AND data IS NOT NULL").all(business)){const pack=JSON.parse(row.data);for(const s of pack.used||[]){if(!inRange(s.at))continue;const tid=s.trainerId||pack.trainerId,key='id:'+tid;let r=rows.get(key);if(!r){r={id:key,name:s.trainer||pack.trainer,legacy:false,bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,sessions:0,details:[]};rows.set(key,r);}r.sessions++;r.details.push({id:pack.id+':'+s.at,number:'PT',date:s.at,type:'PT session',customer:pack.customer,services:pack.name,method:'—',beforeTax:0,total:0});}}
  const staff=[...rows.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
  for(const row of staff)row.details.sort((a,b)=>a.date.localeCompare(b.date)||a.number.localeCompare(b.number));
- const totals={bills:0,services:0,gross:0,discounts:0,refunds:0,net:0};for(const row of staff)for(const k of Object.keys(totals))totals[k]+=row[k];
+ const totals={bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,sessions:0};for(const row of staff)for(const k of Object.keys(totals))totals[k]+=row[k];
  return{from,to,timeZone:'Asia/Dubai',staff,stylists:staff,totals};
 }
 export async function financeRoute({db,u,req,res,path,body,send}){
