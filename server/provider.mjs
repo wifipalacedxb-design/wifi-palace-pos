@@ -47,7 +47,7 @@ export async function providerRoute({db,req,res,path,body,send,limited,origin,se
  if(path==='/api/provider/logout'&&req.method==='POST'){db.prepare('DELETE FROM provider_sessions WHERE token=?').run(token);send(res,200,{ok:true},{'Set-Cookie':`provider_session=; HttpOnly; SameSite=Strict; Path=/api/provider; Max-Age=0${secure?'; Secure':''}`});return true;}
  if(path==='/api/provider/audit'&&req.method==='GET'){send(res,200,db.prepare('SELECT * FROM provider_audit ORDER BY id DESC LIMIT 100').all());return true;}
  if(path==='/api/provider/salons'&&req.method==='GET'){
-  send(res,200,db.prepare(`SELECT s.id,s.name,s.slug,s.active,s.created,p.plan,p.status,p.expires,(SELECT email FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerEmail,(SELECT active FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerActive FROM businesses s LEFT JOIN subscriptions p ON p.business_id=s.id ORDER BY s.created DESC`).all());return true;
+  send(res,200,db.prepare(`SELECT s.id,s.name,s.slug,s.type,s.active,s.created,p.plan,p.status,p.expires,(SELECT email FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerEmail,(SELECT active FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerActive FROM businesses s LEFT JOIN subscriptions p ON p.business_id=s.id ORDER BY s.created DESC`).all());return true;
  }
  if(path==='/api/provider/salons'&&req.method==='POST'){
   const b=await body(req),p=planFields(b);

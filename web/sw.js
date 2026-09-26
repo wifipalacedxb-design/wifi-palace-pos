@@ -1,4 +1,4 @@
-const CACHE='salon-cloud-shell-v2-7-birthday';
+const CACHE='salon-cloud-shell-v3-0-business';
 const FILES=['/whatsapp.js','/','/index.html','/finance.js','/cloud.js','/sync-core.js','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 // A new worker waits for all old tabs to close; it never reloads an unpaid bill.
