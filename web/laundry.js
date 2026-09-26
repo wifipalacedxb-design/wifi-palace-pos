@@ -6,11 +6,11 @@
  const STATUSES=['Received','Washing','Ready','Delivered','Cancelled'];
  const NEXT={Received:'Washing',Washing:'Ready'};
  const OWN=['Dashboard','New order','Orders','Price list'];
- const OWNER_ONLY=['Dashboard','Sales','Price list','Settings','Finance','Team'];
+ const OWNER_ONLY=['Dashboard','Sales','Price list','Settings','Finance','Reports','Team'];
  const CATEGORIES=['Wash & iron','Dry clean','Iron only','Wash & fold','Household','Other'];
  const isLaundry=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='laundry';
  const isOwner=()=>cloudUser?.role==='owner';
- const tabs=()=>isOwner()?['Dashboard','New order','Orders','Customers','Sales','Price list','Settings','Finance','Team','Sync centre','Account']:['New order','Orders','Customers','My sales','Sync centre','Account'];
+ const tabs=()=>isOwner()?['Dashboard','New order','Orders','Customers','Sales','Price list','Settings','Finance','Reports','Team','Sync centre','Account']:['New order','Orders','Customers','My sales','Sync centre','Account'];
  const localDay=(d=new Date())=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
  const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return localDay(d)};
  const line=i=>Math.round(i.price*i.qty);

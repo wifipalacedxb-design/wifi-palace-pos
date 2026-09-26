@@ -8,12 +8,14 @@ import {ApiError,operation} from './rules.mjs';
 import {initProvider,providerRoute,subscriptionAllowed} from './provider.mjs';
 import {initFinance,financeRoute} from './finance.mjs';
 import {initSignup,signupRoute,signupMailer} from './signup.mjs';
+import {initRecovery,recoveryRoute,recoveryMailer} from './recovery.mjs';
 const root=join(dirname(fileURLToPath(import.meta.url)),'..');
-export async function start({mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080'}={}){
+export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080'}={}){
  const db=openStore(file),secure=origin.startsWith('https://'),dummy=await passwordHash('dummy-not-a-real-password-123');
  initProvider(db);
  initFinance(db);
  initSignup(db);
+ initRecovery(db);
  if(!secure&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))throw Error('PUBLIC_ORIGIN must use HTTPS except for local development.');
  function send(res,status,data,extra={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra});res.end(JSON.stringify(data))}
  const owner=u=>{if(u.role!=='owner')throw new ApiError(403,'Owner permission required')};
@@ -25,13 +27,14 @@ export async function start({mailer=signupMailer(),file=process.env.DATABASE_FIL
   try{
    const path=new URL(req.url,'http://local').pathname;
    if(path==='/health'){send(res,200,{ok:true});return}
-   const providerFiles={'/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
+   const providerFiles={'/recover':'recovery.html','/recovery.js':'recovery.js','/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
    if(providerFiles[path]&&req.method==='GET'){const data=await readFile(join(root,'web',providerFiles[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(data);return}
    if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
    if(req.method!=='GET'){
     if(req.headers.origin&&req.headers.origin!==origin)throw new ApiError(403,'Origin not allowed');
     if(req.headers['content-type']?.split(';')[0]!=='application/json')throw new ApiError(415,'JSON request required');
    }
+   if(await recoveryRoute({db,req,res,path,body,send,limited,origin,mailer:recoveryMail}))return;
    if(await signupRoute({db,req,res,path,body,send,limited,origin,mailer}))return;
    if(await providerRoute({db,req,res,path,body,send,limited,origin,secure,dummy}))return;
    if(path==='/api/login'&&req.method==='POST'){

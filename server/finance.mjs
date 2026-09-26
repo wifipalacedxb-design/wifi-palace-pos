@@ -27,9 +27,31 @@ export function financeReport(db,salon,date){
  const row=db.prepare('SELECT data FROM day_closings WHERE business_id=? AND date=?').get(salon,date),closing=row?JSON.parse(row.data):null;
  return{date,timeZone:'Asia/Dubai',totals,expenses,commissions:[...commissions.values()],fingerprint,closing,changedSinceClose:!!closing&&closing.fingerprint!==fingerprint};
 }
+// Staff performance (ported from Salon Desk "stylist reports"). A bill is credited to its assigned
+// staff member; bills without one (e.g. laundry counter sales) go to the team member who created them.
+export function staffReport(db,business,from,to){
+ dateKey(from);dateKey(to);if(from>to)fail(400,'Start date must be on or before end date');
+ const users=new Map(db.prepare('SELECT id,name FROM users WHERE business_id=?').all(business).map(u=>[u.id,u.name]));
+ const rows=new Map(),sales=db.prepare("SELECT data FROM records WHERE business_id=? AND kind='sales' AND data IS NOT NULL ORDER BY id").all(business).map(r=>JSON.parse(r.data));
+ const inRange=d=>{const day=businessDay(d);return day>=from&&day<=to};
+ for(const sale of sales){
+  const sold=inRange(sale.date),refunded=sale.status==='Refunded'&&inRange(sale.refundDate);if(!sold&&!refunded)continue;
+  const byUser=!sale.staffId&&sale.createdBy&&users.has(sale.createdBy);
+  const key=sale.staffId?'id:'+sale.staffId:byUser?'user:'+sale.createdBy:'legacy:'+(sale.staff||'Unassigned');
+  let row=rows.get(key);if(!row){row={id:key,name:byUser?users.get(sale.createdBy):sale.staff||'Unassigned',legacy:!sale.staffId&&!byUser,bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,details:[]};rows.set(key,row);}
+  const value=sale.sub-sale.off,lines=sale.items.map(i=>i.name+' × '+i.qty).join('; ');
+  if(sold){row.bills++;row.services+=sale.items.reduce((n,i)=>n+(i.unit==='kg'?1:i.qty),0);row.gross+=sale.sub;row.discounts+=sale.off;row.net+=value;row.details.push({id:sale.id,number:sale.number,date:sale.date,type:'Sale',customer:sale.customer,services:lines,method:sale.method,beforeTax:value,total:sale.total});}
+  if(refunded){row.refunds+=value;row.net-=value;row.details.push({id:sale.id,number:sale.number,date:sale.refundDate,type:'Refund',customer:sale.customer,services:lines,method:sale.method,beforeTax:-value,total:-sale.total});}
+ }
+ const staff=[...rows.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+ for(const row of staff)row.details.sort((a,b)=>a.date.localeCompare(b.date)||a.number.localeCompare(b.number));
+ const totals={bills:0,services:0,gross:0,discounts:0,refunds:0,net:0};for(const row of staff)for(const k of Object.keys(totals))totals[k]+=row[k];
+ return{from,to,timeZone:'Asia/Dubai',staff,stylists:staff,totals};
+}
 export async function financeRoute({db,u,req,res,path,body,send}){
  if(!path.startsWith('/api/finance/'))return false;
  if(u.role!=='owner')fail(403,'Owner permission required');
+ if((path==='/api/finance/staff'||path==='/api/finance/stylists')&&req.method==='GET'){const q=new URL(req.url,'http://local').searchParams;send(res,200,staffReport(db,u.business_id,q.get('from')||businessDay(),q.get('to')||businessDay()));return true}
  if(path==='/api/finance/report'&&req.method==='GET'){send(res,200,financeReport(db,u.business_id,new URL(req.url,'http://local').searchParams.get('date')||businessDay()));return true}
  if(path==='/api/finance/expenses'&&req.method==='POST'){
   const b=await body(req),expense={id:key(b.id),date:dateKey(b.date),amount:amount(b.amount),method:b.method,category:text(b.category,60),note:text(b.note)};

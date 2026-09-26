@@ -57,6 +57,17 @@ export async function providerRoute({db,req,res,path,body,send,limited,origin,se
    const type=businessTypeOrFail(b.type);db.prepare('INSERT INTO businesses(id,name,slug,active,created,type) VALUES (?,?,?,?,?,?)').run(salon,b.name.trim(),b.slug,1,new Date().toISOString(),type);db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,0)').run(user,salon,b.email.toLowerCase(),b.owner.trim(),pass,'owner');seed(db,salon,b.name.trim(),type);db.prepare('INSERT INTO subscriptions VALUES (?,?,?,?)').run(salon,p.plan,p.status,p.expires);const activationUrl=newInvite(user);log(a.id,'create-salon',salon);db.exec('COMMIT');send(res,201,{id:salon,activationUrl});return true;
   }catch(e){db.exec('ROLLBACK');throw e;}
  }
+ const codeMatch=path.match(/^\/api\/provider\/salons\/([a-f0-9-]+)\/code$/);
+ if(codeMatch&&req.method==='POST'){
+  const b=await body(req),slug=typeof b.slug==='string'?b.slug.trim().toLowerCase():'';
+  if(!/^[a-z0-9-]{3,40}$/.test(slug))throw new ApiError(400,'Use 3–40 lowercase letters, numbers or hyphens.');
+  const business=db.prepare('SELECT * FROM businesses WHERE id=?').get(codeMatch[1]);if(!business)throw new ApiError(404,'Business not found');
+  db.exec('BEGIN IMMEDIATE');try{
+   if(db.prepare('SELECT 1 FROM businesses WHERE slug=? AND id<>?').get(slug,business.id))throw new ApiError(409,'Business code already exists. Choose another code.');
+   if(slug!==business.slug){db.prepare('UPDATE businesses SET slug=? WHERE id=?').run(slug,business.id);db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE business_id=?)').run(business.id);log(a.id,'business-code:'+business.slug+'->'+slug,business.id);}
+   db.exec('COMMIT');send(res,200,{ok:true,salonCode:slug,businessCode:slug});return true;
+  }catch(e){db.exec('ROLLBACK');throw e;}
+ }
  const match=path.match(/^\/api\/provider\/salons\/([a-f0-9-]+)(\/invite)?$/);
  if(match){const salon=db.prepare('SELECT * FROM businesses WHERE id=?').get(match[1]);if(!salon)throw new ApiError(404,'Salon not found');
   if(match[2]&&req.method==='POST'){
