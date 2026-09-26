@@ -1,0 +1,7 @@
+.env
+data
+backups
+android
+tests
+.git
+*.zip
