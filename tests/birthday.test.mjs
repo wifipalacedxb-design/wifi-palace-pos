@@ -11,7 +11,7 @@ const source=readFileSync(new URL('../web/whatsapp.js',import.meta.url),'utf8');
 test('DOB validates calendar dates and preserves data from older clients',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'birthday-')),db=openStore(join(dir,'db'));
  try{
- const a=await createSalon(db,{name:'A',slug:'salon-a',owner:'A',email:'a@test.com',password:'a-long-password'}),u={id:a.userId,salon_id:a.salonId,role:'owner'};
+ const a=await createSalon(db,{name:'A',slug:'salon-a',owner:'A',email:'a@test.com',password:'a-long-password'}),u={id:a.userId,business_id:a.salonId,role:'owner'};
  const put=(data,base=0)=>operation(db,u,{id:randomUUID(),kind:'customers',key:'c',action:'put',base,data:{id:'c',name:'Client',phone:'0501234567',...data}});
  for(const dob of ['2001-02-29','2000-02-30','9999-01-01','1899-12-31','not a date',123])assert.throws(()=>put({dob}));
  put({dob:'2000-02-29'});assert.equal(snapshot(db,a.salonId).state.customers[0].dob,'2000-02-29');

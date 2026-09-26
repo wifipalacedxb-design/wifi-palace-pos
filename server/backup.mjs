@@ -8,7 +8,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 const execute=promisify(execFile);
 const pattern=/^salon-backup-\d{8}T\d{9}Z-[a-f0-9-]+\.sqlite$/;
-const required=['salons','users','records','operations','audit','subscriptions','provider_admins'];
+const required=['businesses','users','records','operations','audit','subscriptions','provider_admins'];
 export async function digest(file){const h=createHash('sha256');for await(const chunk of createReadStream(file))h.update(chunk);return h.digest('hex')}
 export function inspect(file){const db=new DatabaseSync(file,{readOnly:true});try{const check=db.prepare('PRAGMA integrity_check').all();if(check.length!==1||Object.values(check[0])[0]!=='ok')throw Error('Database integrity check failed');if(db.prepare('PRAGMA foreign_key_check').all().length)throw Error('Database foreign key check failed');const tables=db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x=>x.name);for(const table of required)if(!tables.includes(table))throw Error('Not a complete salon database: missing '+table);const counts={};for(const table of tables.filter(x=>!x.startsWith('sqlite_'))){counts[table]=db.prepare('SELECT count(*) n FROM "'+table.replaceAll('"','""')+'"').get().n}return counts}finally{db.close()}}
 export async function verifyBackup(file){const manifest=JSON.parse(await readFile(file+'.json','utf8'));if(manifest.format!==1||manifest.file!==basename(file)||await digest(file)!==manifest.sha256)throw Error('Backup checksum or manifest mismatch');const counts=inspect(file);if(JSON.stringify(counts)!==JSON.stringify(manifest.counts))throw Error('Backup table counts mismatch');return manifest}

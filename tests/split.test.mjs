@@ -14,7 +14,7 @@ test('split validation, replay, original-method refunds and cash closing inputs'
  const app=await start({file:join(dir,'db.sqlite'),port:0,mailer:null});
  t.after(async()=>{await app.close();await rm(dir,{recursive:true,force:true})});
  const a=await createSalon(app.db,{name:'Split Salon',slug:'split-salon',owner:'Owner',email:'split@test.com',password:'test-password-123'});
- const u={id:a.userId,salon_id:a.salonId,role:'owner'};
+ const u={id:a.userId,business_id:a.salonId,role:'owner'};
  const sale={date:new Date().toISOString(),items:[{id:'s1',price:5000,qty:1}],sub:5000,off:0,tax:0,total:5000,received:6000,customerId:'',staff:'Stylist 1',method:'Split',cashAmount:2000,cardAmount:3000,status:'Paid'};
  const op=(key,data,base=0)=>({id:randomUUID(),kind:'sales',key,base,action:'put',data});
  for(const bad of [{cashAmount:0,cardAmount:5000},{cashAmount:2000,cardAmount:2000},{cashAmount:-1,cardAmount:5001},{cashAmount:2000.1,cardAmount:2999.9},{received:4999},{cashAmount:undefined}]){
