@@ -18,8 +18,8 @@ function validate(db,u,kind,key,data,old){
   if(old){if(u.role!=='owner')fail('Only the salon owner can refund a sale',403);if(old.status!=='Paid'||data.status!=='Refunded')fail('Saved sales cannot be edited',409);return{...old,status:'Refunded',refundReason:required(data.refundReason,500),refundDate:new Date().toISOString(),refundedBy:u.id,creditNote:documentNumber('CN',nextNumber(db,salon,'credit-note'))};}
   if(data.status!=='Paid'||!Array.isArray(data.items)||data.items.length<1||data.items.length>100)fail('Invalid sale');
   const shop=get(db,salon,'settings','singleton');
-  const items=data.items.map(i=>{const service=get(db,salon,mod.catalogKind,i.id);if(!service)fail('A service was removed. Review this pending bill.',409);if(i.price!==service.price)fail('A service price changed. Review this pending bill.',409);if(!Number.isInteger(i.qty)||i.qty<1||i.qty>100)fail('Invalid service quantity');return{...service,qty:i.qty}});
-  const sub=amount(items.reduce((n,i)=>n+i.price*i.qty,0)),off=amount(data.off);if(off>sub)fail('Discount exceeds subtotal');const tax=Math.round((sub-off)*shop.tax/100),total=sub-off+tax;
+  const items=data.items.map(i=>{const service=get(db,salon,mod.catalogKind,i.id);if(!service)fail('A service was removed. Review this pending bill.',409);if(i.price!==service.price)fail('A service price changed. Review this pending bill.',409);const q=i.qty,kg=service.unit==='kg';if(typeof q!=='number'||!Number.isFinite(q)||q<=0||q>(kg?1000:100)||(kg?Math.round(q*100)!==q*100:!Number.isInteger(q)))fail('Invalid quantity');return{...service,qty:q}});
+  const sub=amount(items.reduce((n,i)=>n+Math.round(i.price*i.qty),0)),off=amount(data.off);if(off>sub)fail('Discount exceeds subtotal');const tax=Math.round((sub-off)*shop.tax/100),total=sub-off+tax;
   if(data.total!==total||data.tax!==tax||data.sub!==sub)fail('Bill totals differ from the cloud catalogue or tax settings. Review before syncing.',409);
   if(!['Cash','Card (external terminal)','Split'].includes(data.method))fail('Invalid payment method');
   const received=amount(data.received);if(received<total)fail('Insufficient payment');
@@ -32,7 +32,8 @@ function validate(db,u,kind,key,data,old){
   let commission={};
   if(data.staffId){const stylist=get(db,salon,'staff',data.staffId);if(!stylist)fail('Stylist no longer exists',409);const rate=stylist.commissionBps||0;if(data.commissionBps!==rate)fail('Stylist commission changed. Review this pending sale.',409);commission={staffId:stylist.id,commissionBps:rate,commissionAmount:Math.round((sub-off)*rate/10000)};}
   // The tax invoice number is issued here, in upload order, so numbers are sequential with no gaps even when bills were made offline.
-  return {...commission,id:key,number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:shop.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
+  const ref=text(data.ref??'',100);
+  return {...commission,...(ref?{ref}:{}),id:key,number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:shop.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
  }
  fail('Unknown record type');
 }
