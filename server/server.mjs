@@ -75,4 +75,4 @@ export async function start({mailer=signupMailer(),file=process.env.DATABASE_FIL
  server.requestTimeout=30000;server.headersTimeout=10000;
  await new Promise(resolve=>server.listen(port,host,resolve));return{server,db,close:()=>new Promise(resolve=>server.close(()=>{db.close();resolve()}))};
 }
-if(process.argv[1]===fileURLToPath(import.meta.url)){const app=await start();console.log('Salon Cloud listening on port '+app.server.address().port);}
+if(process.argv[1]===fileURLToPath(import.meta.url)){const app=await start();console.log('WiFi Palace POS listening on port '+app.server.address().port);}

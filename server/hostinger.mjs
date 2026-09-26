@@ -2,5 +2,5 @@
 import {start} from './server.mjs';
 
 const app = await start();
-console.log('Salon Cloud listening on port ' + app.server.address().port);
+console.log('WiFi Palace POS listening on port ' + app.server.address().port);
 export default app.server;
