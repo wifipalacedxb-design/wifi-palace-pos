@@ -1,13 +1,39 @@
 plugins { id 'com.android.application' }
+
+// Release signing: put keystore details in android/keystore.properties (never commit it),
+// or pass them as environment variables (used by the GitHub Actions build).
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+def signingValue = { String key, String env -> keystoreProps.getProperty(key) ?: System.getenv(env) }
+def releaseStore = signingValue('storeFile', 'SALON_KEYSTORE_FILE')
+
 android {
     namespace 'com.wifipalace.salonpos'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.wifipalace.saloncloud'
+        applicationId 'com.wifipalace.pos'
         minSdk 26
-        targetSdk 34
-        versionCode 3
-        versionName '2.0'
+        targetSdk 35
+        versionCode 1
+        versionName '3.0'
+    }
+    signingConfigs {
+        if (releaseStore) {
+            release {
+                storeFile rootProject.file(releaseStore)
+                storePassword signingValue('storePassword', 'SALON_KEYSTORE_PASSWORD')
+                keyAlias signingValue('keyAlias', 'SALON_KEY_ALIAS')
+                keyPassword signingValue('keyPassword', 'SALON_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false // keeps the @JavascriptInterface bridge method names intact
+            debuggable false
+            if (releaseStore) signingConfig signingConfigs.release
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }

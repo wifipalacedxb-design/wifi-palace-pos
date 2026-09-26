@@ -20,3 +20,34 @@ The shell loads only the configured HTTPS origin and blocks external top-level n
 First use requires connectivity and a provisioned salon account. Offline use relies on the cached hosted app shell, a current Android System WebView and its service worker/Web Locks support. Validate airplane-mode billing, close/reopen, reconnect, duplicate prevention, cookie persistence, logo selection and receipt export on the real POS machine before rollout.
 
 The native placeholder WP icon is included. No built-in printer SDK, card payment SDK or official company logo is bundled. An owner can upload the company/salon logos through the hosted Settings screen.
+
+## Release build (v2.1)
+
+Create a release key once and keep it safe. Every future update must be signed with the same key.
+
+```
+keytool -genkeypair -v -keystore salon-release.jks -alias salondesk -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Local build: copy the keystore into `android/`, create `android/keystore.properties` (git-ignored):
+
+```
+storeFile=salon-release.jks
+storePassword=...
+keyAlias=salondesk
+keyPassword=...
+```
+
+Then run `gradle :app:assembleRelease` (APK) or `gradle :app:bundleRelease` (AAB for Google Play).
+
+GitHub build: `.github/workflows/android.yml` builds a debug APK on every push to `android/`. To also get a signed release APK/AAB, add repository secrets `SALON_KEYSTORE_BASE64` (output of `base64 -w0 salon-release.jks`), `SALON_KEYSTORE_PASSWORD`, `SALON_KEY_ALIAS`, `SALON_KEY_PASSWORD`. Download the result from the workflow run's **Artifacts**.
+
+Shell behaviour in v2.1: WhatsApp, phone, email and other outside links open in the matching app; Back goes to the previous page before asking to close; a "No connection · Retry" screen replaces the browser error page; native bridge calls only work while the trusted salon page is loaded; `<input type="file">` opens the file picker; content is padded for Android 15 edge-to-edge display.
+
+## LAN receipt printers (WiFi Palace POS 3.0)
+
+App ID `com.wifipalace.pos` (installs alongside Salon Desk). Loads https://pos.wifipalace.in/.
+
+Receipts print straight to network thermal printers (ESC/POS over TCP port 9100, e.g. POSWAY CPQ 2 / CPQ 3). Each device stores its printer IP and paper width (80 or 58 mm) under Settings → Receipt printer. The receipt is rendered as an image, so Arabic text and the business logo print on any ESC/POS printer. Only private shop-network addresses (10.x, 172.16–31.x, 192.168.x) on port 9100 are allowed. Without a printer set, the Android print dialog is used.
+
+Printer setup: print the printer's self-test page (hold FEED while switching on) to find its IP; give it a fixed IP or a DHCP reservation on the shop router.

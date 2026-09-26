@@ -1,0 +1,48 @@
+name: Android APK
+
+on:
+  push:
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      HAS_KEYSTORE: ${{ secrets.SALON_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check Android SDK
+        run: echo "ANDROID_HOME=$ANDROID_HOME" && ls "$ANDROID_HOME/platforms"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK (for testing)
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Build signed release APK
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          SALON_KEYSTORE_FILE: release.jks
+          SALON_KEYSTORE_PASSWORD: ${{ secrets.SALON_KEYSTORE_PASSWORD }}
+          SALON_KEY_ALIAS: ${{ secrets.SALON_KEY_ALIAS }}
+          SALON_KEY_PASSWORD: ${{ secrets.SALON_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.SALON_KEYSTORE_BASE64 }}" | base64 -d > release.jks
+          gradle --no-daemon :app:assembleRelease :app:bundleRelease
+          rm -f release.jks
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: salon-desk-apk
+          path: |
+            android/app/build/outputs/apk/**/*.apk
+            android/app/build/outputs/bundle/release/*.aab
