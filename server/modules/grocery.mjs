@@ -55,9 +55,22 @@ export const grocery={
   for(const p of all('grocery_payments'))add(credit,p.customerId,-p.amount);
   return{stock,credit};
  },
- validate({db,business,kind,key,data,old,u}){
+ validate(args){return retailValidate(args)}
+};
+
+// Shared by grocery and pet shop: products (piece/kg, barcode, scale code), services (pet shop: no stock),
+// stock movements, customer credit payments and label-scale settings.
+export function retailValidate({db,business,kind,key,data,old,u},{categories=GROCERY_CATEGORIES,serviceTypes=null}={}){
+ {
   if(kind==='grocery_items'){
-   if(!GROCERY_CATEGORIES.includes(data.category))fail('Choose a category');
+   if(!categories.includes(data.category))fail('Choose a category');
+   if(serviceTypes&&data.type==='service'){
+    if(old&&old.type!=='service')fail('A product cannot become a service. Add a new item instead.',409);
+    if(!serviceTypes.includes(data.serviceType))fail('Choose the service type');
+    const minutes=data.duration??60;if(!Number.isInteger(minutes)||minutes<5||minutes>1440)fail('Duration must be 5 to 1440 minutes');
+    return{id:key,type:'service',serviceType:data.serviceType,name:required(data.name,100),barcode:'',category:data.category,unit:'piece',price:amount(data.price),cost:0,minStock:0,duration:minutes,openPrice:data.openPrice===true};
+   }
+   if(old?.type==='service')fail('A service cannot become a product. Add a new item instead.',409);
    if(!['piece','kg'].includes(data.unit))fail('Unit must be piece or kg');
    if(old&&old.unit!==data.unit)fail('A product cannot change between piece and kg. Add a new product instead.',409);
    const code=barcode(data.barcode);
@@ -81,7 +94,7 @@ export const grocery={
    if(old)fail('Stock entries cannot be changed. Add a correction instead.',409);
    if(!['in','adjust'].includes(data.type))fail('Stock entry must be goods in or a count adjustment');
    if(data.type==='adjust'&&u.role!=='owner')fail('Only the owner can adjust stock counts',403);
-   const item=get(db,business,'grocery_items',required(data.itemId,100));if(!item)fail('Product must sync before its stock',409);
+   const item=get(db,business,'grocery_items',required(data.itemId,100));if(!item)fail('Product must sync before its stock',409);if(item.type==='service')fail('Services have no stock');
    const e={id:key,type:data.type,itemId:item.id,item:item.name,unit:item.unit,qty:qty(data.qty,item.unit,'Quantity',data.type==='adjust'),at:recent(data.at,'stock'),by:u.id,note:text(data.note??'',200)};
    if(data.type==='in'){e.cost=amount(data.cost??0);e.supplier=text(data.supplier??'',100);e.invoice=text(data.invoice??'',60);}
    else e.reason=required(data.reason??'',200);
@@ -97,4 +110,4 @@ export const grocery={
   }
   fail('Unknown record type');
  }
-};
+}
