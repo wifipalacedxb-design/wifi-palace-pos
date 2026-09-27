@@ -10,3 +10,5 @@ android/**/build/
 android/keystore.properties
 *.jks
 *.keystore
+windows/node_modules/
+windows/dist/

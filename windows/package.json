@@ -1,0 +1,29 @@
+{
+  "name": "wifi-palace-pos-windows",
+  "productName": "WiFi Palace POS",
+  "version": "3.1.0",
+  "description": "WiFi Palace POS for Windows",
+  "author": "WiFi Palace",
+  "homepage": "https://pos.wifipalace.in",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.wifipalace.pos",
+    "productName": "WiFi Palace POS",
+    "copyright": "WiFi Palace",
+    "files": ["main.js", "preload.js", "escpos.js", "offline.html", "build/icon.png"],
+    "directories": {"output": "dist", "buildResources": "build"},
+    "win": {"target": [{"target": "nsis", "arch": ["x64"]}], "icon": "build/icon.png", "artifactName": "WiFiPalacePOS-Setup-${version}.exe"},
+    "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "WiFi Palace POS", "runAfterFinish": true}
+  }
+}
