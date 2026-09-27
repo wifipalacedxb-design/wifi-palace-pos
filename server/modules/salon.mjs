@@ -13,7 +13,7 @@ export const salon={
   appointments:[]
  }),
  validate({db,business,kind,key,data,old}){
-  if(kind==='services')return{id:key,name:required(data.name,100),category:required(data.category,50),price:amount(data.price)};
+  if(kind==='services')return{id:key,name:required(data.name,100),category:required(data.category,50),price:amount(data.price),openPrice:data.openPrice===true};
   if(kind==='appointments'){
    if(!Number.isFinite(Date.parse(data.when))||!Number.isInteger(data.duration)||data.duration<5||data.duration>480||!['Booked','Completed','Cancelled'].includes(data.status))fail('Invalid appointment');
    const staff=get(db,business,'staff',data.staffId);if(!staff)fail('Stylist no longer exists',409);

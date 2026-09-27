@@ -34,7 +34,7 @@ function when(kind,d){
 }
 const historic=(kind,d,cutoff)=>d&&when(kind,d)<cutoff;
 // Receipts and item lines stay small on devices: the logo lives once in settings, not in every sale.
-function slim(kind,d){if(kind!=='sales'||!d)return d;return{...d,shop:d.shop?{...d.shop,logo:''}:d.shop,items:(d.items||[]).map(i=>{const l={id:i.id,name:i.name};for(const k of ['category','unit','type'])if(i[k]!==undefined)l[k]=i[k];l.price=i.price;l.qty=i.qty;return l})}}
+function slim(kind,d){if(kind!=='sales'||!d)return d;return{...d,shop:d.shop?{...d.shop,logo:''}:d.shop,items:(d.items||[]).map(i=>{const l={id:i.id,name:i.name};for(const k of ['category','unit','type'])if(i[k]!==undefined)l[k]=i[k];l.price=i.price;if(i.listPrice!==undefined)l.listPrice=i.listPrice;l.qty=i.qty;return l})}}
 const visibleTo=(u,kind,d)=>!(u.role==='cashier'&&kind==='sales'&&d&&d.createdBy!==u.id);
 
 export function summaryFor(db,business,type){const m=businessModule(type);return typeof m.summary==='function'?m.summary(db,business):null}
