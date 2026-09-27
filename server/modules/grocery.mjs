@@ -4,12 +4,12 @@
 // (goods in, count adjustments) minus quantities on paid sales. Offline devices therefore never
 // overwrite each other's stock, and a sale is never blocked by a stock figure (it shows as low/negative).
 // Credit sales are core sales with method "Credit (account)"; money collected later is a payment record.
-import {fail,text,required,amount,get} from '../check.mjs';
+import {fail,text,required,amount,get,OFFLINE_GRACE_DAYS} from '../check.mjs';
 
 export const GROCERY_CATEGORIES=['Fruits & vegetables','Dairy & eggs','Bakery','Meat & fish','Rice, flour & grains','Cooking & spices','Snacks & sweets','Drinks','Frozen','Household & cleaning','Personal care','Baby','Tobacco','Other'];
 const DAY=86400000;
 const qty=(v,unit,label='Quantity',allowNegative=false)=>{if(typeof v!=='number'||!Number.isFinite(v)||v===0||Math.abs(v)>100000||(!allowNegative&&v<0))fail(label+' must be a non-zero number');if(unit==='kg'?Math.round(v*1000)!==v*1000:!Number.isInteger(v))fail(unit==='kg'?label+' allows up to 3 decimals (grams)':label+' must be whole pieces');return v};
-const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-3*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
+const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-OFFLINE_GRACE_DAYS*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
 const barcode=v=>{const b=text(v??'',40).replace(/\s+/g,'');if(b&&!/^[A-Za-z0-9-]{3,40}$/.test(b))fail('Barcode may only contain letters, numbers and dashes');return b};
 
 // What a customer owes: unrefunded credit sales minus payments received.
@@ -43,6 +43,14 @@ export const grocery={
   staff:[{id:'t1',name:'Cashier 1'}],
   grocery_stock:[],grocery_payments:[]
  }),
+ // Authoritative totals from every till's synced records; devices add their own unsynced changes on top.
+ summary(db,business){
+  const stock={},credit={},all=kind=>db.prepare('SELECT data FROM records WHERE business_id=? AND kind=? AND data IS NOT NULL').all(business,kind).map(r=>JSON.parse(r.data)),add=(m,k,v)=>{m[k]=Math.round(((m[k]||0)+v)*1000)/1000};
+  for(const e of all('grocery_stock'))add(stock,e.itemId,e.qty);
+  for(const s of all('sales')){if(s.status!=='Paid')continue;for(const i of s.items)add(stock,i.id,-i.qty);if(s.method==='Credit (account)')add(credit,s.customerId,s.total)}
+  for(const p of all('grocery_payments'))add(credit,p.customerId,-p.amount);
+  return{stock,credit};
+ },
  validate({db,business,kind,key,data,old,u}){
   if(kind==='grocery_items'){
    if(!GROCERY_CATEGORIES.includes(data.category))fail('Choose a category');

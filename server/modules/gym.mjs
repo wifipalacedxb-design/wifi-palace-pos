@@ -2,7 +2,7 @@
 // memberships with freeze/renewal, front-desk check-ins and PT session tracking.
 // Selling reuses the core sales record (tax invoice, finance, printing). Memberships and PT packs
 // point at the paid sale; the client uploads them after the sale, so the server can check the sale.
-import {fail,text,required,amount,get} from '../check.mjs';
+import {fail,text,required,amount,get,OFFLINE_GRACE_DAYS} from '../check.mjs';
 
 export const GYM_ITEM_TYPES=['plan','pt','product'];
 const DAY=86400000;
@@ -11,8 +11,8 @@ const date=(v,label='date')=>{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.tes
 export const addDays=(d,n)=>new Date(Date.parse(d)+n*DAY).toISOString().slice(0,10);
 export const daysBetween=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY);
 const int=(v,min,max,label)=>{if(!Number.isInteger(v)||v<min||v>max)fail(`${label} must be a whole number from ${min} to ${max}`);return v};
-// Offline devices may upload a little late; accept event times from the last 3 days up to 5 minutes ahead.
-const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-3*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
+// Offline devices may upload late; accept event times from the offline grace period up to 5 minutes ahead.
+const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-OFFLINE_GRACE_DAYS*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
 const member=(db,business,id)=>{const c=get(db,business,'customers',required(id,100));if(!c)fail('Member must sync before this record',409);return c};
 const all=(db,business,kind)=>db.prepare('SELECT data FROM records WHERE business_id=? AND kind=? AND data IS NOT NULL').all(business,kind).map(r=>JSON.parse(r.data));
 
@@ -66,10 +66,10 @@ export const gym={
     const m={...old},today=uaeDay();
     if(data.status===old.status)return old; // nothing that can change
     if(old.status==='Active'&&data.status==='Frozen'){
-     const from=date(data.frozenFrom,'freeze date');if(from<addDays(today,-3)||from>today)fail('Freeze from today (or the last 3 days)');if(from<old.start||from>old.end)fail('Only a running membership can be frozen',409);
+     const from=date(data.frozenFrom,'freeze date');if(from<addDays(today,-OFFLINE_GRACE_DAYS)||from>today)fail('Invalid freeze date');if(from<old.start||from>old.end)fail('Only a running membership can be frozen',409);
      m.status='Frozen';m.frozenFrom=from;m.freezeReason=required(data.freezeReason,200);
     }else if(old.status==='Frozen'&&data.status==='Active'){
-     const to=date(data.unfrozenOn,'unfreeze date');if(to<old.frozenFrom||to>today||to<addDays(today,-3))fail('Invalid unfreeze date');
+     const to=date(data.unfrozenOn,'unfreeze date');if(to<old.frozenFrom||to>today||to<addDays(today,-OFFLINE_GRACE_DAYS))fail('Invalid unfreeze date');
      const days=daysBetween(old.frozenFrom,to);m.status='Active';m.end=addDays(old.end,days);m.freezes=[...(old.freezes||[]),{from:old.frozenFrom,to,days,reason:old.freezeReason,by:u.id}].slice(-50);delete m.frozenFrom;delete m.freezeReason;
     }else if(data.status==='Cancelled'&&old.status!=='Cancelled'){
      if(u.role!=='owner')fail('Only the owner can cancel a membership',403);m.status='Cancelled';m.cancelReason=required(data.cancelReason,300);m.cancelledAt=new Date().toISOString();
@@ -80,7 +80,7 @@ export const gym={
    if(data.status!=='Active')fail('New memberships start as Active');
    const plan=get(db,business,'gym_items',required(data.planId,100));if(!plan||plan.type!=='plan')fail('This plan was removed. Review this membership.',409);
    const c=member(db,business,data.customerId);
-   const start=date(data.start,'start date'),today=uaeDay();if(start<addDays(today,-7)||start>addDays(today,400))fail('Start date must be within a week ago and 400 days ahead');
+   const start=date(data.start,'start date'),today=uaeDay();if(start<addDays(today,-OFFLINE_GRACE_DAYS)||start>addDays(today,400))fail('Start date must be within the last month and 400 days ahead');
    const saleId=paidFrom(db,business,u,{saleId:data.saleId,itemId:plan.id,customerId:c.id,kind:'gym_memberships'});
    return{id:key,customerId:c.id,customer:c.name,phone:c.phone||'',planId:plan.id,plan:plan.name,days:plan.days,start,end:addDays(start,plan.days-1),status:'Active',freezes:[],saleId,complimentary:!saleId,createdBy:u.id,created:new Date().toISOString(),history:[{status:'Active',at:new Date().toISOString(),by:u.id}]};
   }

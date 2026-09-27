@@ -19,10 +19,19 @@
 
  // --- derived data ---------------------------------------------------------------------------------
  function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['grocery_items','grocery_stock','grocery_payments'])db[k]??=[]}}
- // Stock = goods in + count adjustments − quantities on paid (not refunded) sales. Pending sales count too.
- function stockLevels(){const m=new Map(db.grocery_items.map(i=>[i.id,0]));for(const e of db.grocery_stock)m.set(e.itemId,(m.get(e.itemId)||0)+e.qty);for(const s of db.sales)if(s.status==='Paid')for(const i of s.items)if(m.has(i.id))m.set(i.id,m.get(i.id)-i.qty);for(const [k,v] of m)m.set(k,Math.round(v*1000)/1000);return m}
+ // Stock and credit come from the server's totals across every till (cache.summary), plus this device's
+ // own changes that have not synced yet. Without a summary (older server) they are computed locally.
+ const pendingOps=()=>(typeof cache!=='undefined'&&cache?.pending)||[];
+ const summary=()=>(typeof cache!=='undefined'&&cache?.summary)||null;
+ function stockLevels(){const sum=summary()?.stock,m=new Map(db.grocery_items.map(i=>[i.id,sum?(sum[i.id]||0):0])),add=(k,v)=>{if(m.has(k))m.set(k,m.get(k)+v)};
+  if(sum){for(const o of pendingOps()){if(o.action!=='put'||!o.data)continue;if(o.kind==='grocery_stock'&&o.base===0)add(o.data.itemId,o.data.qty);if(o.kind==='sales'){const sign=o.base===0&&o.data.status==='Paid'?-1:o.base>0&&o.data.status==='Refunded'?1:0;if(sign)for(const i of o.data.items)add(i.id,sign*i.qty)}}}
+  else{for(const e of db.grocery_stock)add(e.itemId,e.qty);for(const s of db.sales)if(s.status==='Paid')for(const i of s.items)add(i.id,-i.qty)}
+  for(const [k,v] of m)m.set(k,Math.round(v*1000)/1000);return m}
  const low=(i,levels)=>levels.get(i.id)<=(i.minStock||0);
- function balances(){const m=new Map();for(const s of db.sales)if(s.method===CREDIT&&s.status==='Paid')m.set(s.customerId,(m.get(s.customerId)||0)+s.total);for(const p of db.grocery_payments)m.set(p.customerId,(m.get(p.customerId)||0)-p.amount);return m}
+ function balances(){const sum=summary()?.credit,m=new Map(sum?Object.entries(sum):[]),add=(k,v)=>m.set(k,(m.get(k)||0)+v);
+  if(sum){for(const o of pendingOps()){if(o.action!=='put'||!o.data)continue;if(o.kind==='grocery_payments'&&o.base===0)add(o.data.customerId,-o.data.amount);if(o.kind==='sales'&&o.data.method===CREDIT){if(o.base===0&&o.data.status==='Paid')add(o.data.customerId,o.data.total);if(o.base>0&&o.data.status==='Refunded')add(o.data.customerId,-o.data.total)}}}
+  else{for(const s of db.sales)if(s.method===CREDIT&&s.status==='Paid')add(s.customerId,s.total);for(const p of db.grocery_payments)add(p.customerId,-p.amount)}
+  return m}
  const balanceOf=id=>balances().get(id)||0;
 
  // --- navigation ------------------------------------------------------------------------------------
@@ -152,7 +161,7 @@
 
  // --- credit (khata) ------------------------------------------------------------------------------------------------
  function credit(){
-  const bal=balances(),q=creditSearch.trim().toLowerCase(),has=new Set([...db.sales.filter(s=>s.method===CREDIT).map(s=>s.customerId),...db.grocery_payments.map(p=>p.customerId)]),list=db.customers.filter(c=>has.has(c.id)&&(!q||(c.name+' '+c.phone).toLowerCase().includes(q))).sort((a,b)=>(bal.get(b.id)||0)-(bal.get(a.id)||0)),total=[...bal.values()].filter(v=>v>0).reduce((n,v)=>n+v,0);
+  const bal=balances(),q=creditSearch.trim().toLowerCase(),has=new Set([...db.sales.filter(s=>s.method===CREDIT).map(s=>s.customerId),...db.grocery_payments.map(p=>p.customerId),...bal.keys()]),list=db.customers.filter(c=>has.has(c.id)&&(!q||(c.name+' '+c.phone).toLowerCase().includes(q))).sort((a,b)=>(bal.get(b.id)||0)-(bal.get(a.id)||0)),total=[...bal.values()].filter(v=>v>0).reduce((n,v)=>n+v,0);
   $('app').innerHTML=`<div class="panel"><div class="row"><div><h2>Customer credit</h2><p class="helper">Total outstanding <b>${money(total)}</b>. Sell on credit from Checkout by choosing the customer and pressing Credit.</p></div><button onclick="groceryNewAccount()">+ New customer</button></div><label for="gcSearch">Search name or mobile</label><input id="gcSearch" value="${esc(creditSearch)}" oninput="groceryCreditSearch(this.value)">
   ${list.length?list.map(c=>{const b=bal.get(c.id)||0;return `<div class="row" style="padding:12px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:10px"><div style="min-width:200px"><b>${esc(c.name)}</b><div class="helper">${esc(c.phone||'No mobile')}</div></div><b class="${b>0?'danger':''}">${b>0?money(b)+' due':b<0?money(-b)+' in credit':'Settled'}</b><div class="actions" style="margin:0">${b>0?`<button class="primary" onclick="groceryPayment('${esc(c.id)}')">Receive payment</button>`:''}<button onclick="groceryStatement('${esc(c.id)}')">Statement</button>${b>0&&c.phone?`<button onclick="groceryRemind('${esc(c.id)}')">WhatsApp</button>`:''}</div></div>`}).join(''):'<div class="empty">No customer accounts yet.</div>'}</div>`;
  }
@@ -169,7 +178,7 @@
  function statement(id){
   const c=db.customers.find(x=>x.id===id);if(!c)return;
   const rows=[...db.sales.filter(s=>s.customerId===id&&s.method===CREDIT).flatMap(s=>[{at:s.date,text:'Bill '+s.number,amount:s.total},...(s.status==='Refunded'?[{at:s.refundDate,text:'Refund '+(s.creditNote||s.number),amount:-s.total}]:[])]),...db.grocery_payments.filter(p=>p.customerId===id).map(p=>({at:p.at,text:'Payment · '+(p.method==='Cash'?'cash':'card'),amount:-p.amount}))].sort((a,b)=>a.at.localeCompare(b.at));
-  let run=0;const lines=rows.map(r=>{run+=r.amount;return{...r,run}});const s=db.settings,l='--------------------------------';
+  const total=balanceOf(id),visible=rows.reduce((n,r)=>n+r.amount,0),forward=total-visible;let run=forward;const lines=[...(forward?[{at:rows[0]?.at||new Date().toISOString(),text:'Balance brought forward',amount:forward,run:forward}]:[]),...rows.map(r=>{run+=r.amount;return{...r,run}})];const s=db.settings,l='--------------------------------';
   const text=`${s.name}\n${s.phone||''}\n${l}\nACCOUNT STATEMENT\n${c.name}${c.phone?'\n'+c.phone:''}\n${new Date().toLocaleDateString()}\n${l}\n${lines.map(r=>`${new Date(r.at).toLocaleDateString()} ${r.text}\n  ${r.amount>0?'+':''}${money(r.amount)}   bal ${money(r.run)}`).join('\n')||'No activity'}\n${l}\nBALANCE DUE: ${money(run)}`;
   modal(`<h2>Statement · ${esc(c.name)}</h2><pre class="receipt" id="receiptText">${esc(text)}</pre><div class="actions"><button onclick="closeModal()">Close</button><button class="primary" onclick="printReceipt()">Print / Save PDF</button></div>`);
  }

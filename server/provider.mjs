@@ -1,3 +1,4 @@
+import {OFFLINE_HOURS,setOfflineHours} from './sync.mjs';
 import {randomBytes} from 'node:crypto';
 import {hash,id,passwordHash,verify,seed} from './store.mjs';
 import {ApiError} from './rules.mjs';
@@ -47,7 +48,7 @@ export async function providerRoute({db,req,res,path,body,send,limited,origin,se
  if(path==='/api/provider/logout'&&req.method==='POST'){db.prepare('DELETE FROM provider_sessions WHERE token=?').run(token);send(res,200,{ok:true},{'Set-Cookie':`provider_session=; HttpOnly; SameSite=Strict; Path=/api/provider; Max-Age=0${secure?'; Secure':''}`});return true;}
  if(path==='/api/provider/audit'&&req.method==='GET'){send(res,200,db.prepare('SELECT * FROM provider_audit ORDER BY id DESC LIMIT 100').all());return true;}
  if(path==='/api/provider/salons'&&req.method==='GET'){
-  send(res,200,db.prepare(`SELECT s.id,s.name,s.slug,s.type,s.active,s.created,p.plan,p.status,p.expires,(SELECT email FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerEmail,(SELECT active FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerActive FROM businesses s LEFT JOIN subscriptions p ON p.business_id=s.id ORDER BY s.created DESC`).all());return true;
+  send(res,200,db.prepare(`SELECT s.id,s.name,s.slug,s.type,s.active,s.created,p.plan,p.status,p.expires,(SELECT email FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerEmail,(SELECT active FROM users WHERE business_id=s.id AND role='owner' ORDER BY rowid LIMIT 1) ownerActive,COALESCE((SELECT offline_hours FROM business_options WHERE business_id=s.id),12) offlineHours FROM businesses s LEFT JOIN subscriptions p ON p.business_id=s.id ORDER BY s.created DESC`).all());return true;
  }
  if(path==='/api/provider/salons'&&req.method==='POST'){
   const b=await body(req),p=planFields(b);
@@ -75,7 +76,7 @@ export async function providerRoute({db,req,res,path,body,send,limited,origin,se
    if(!salon.active||!subscriptionAllowed(db,salon.id))throw new ApiError(409,'Activate or renew salon access first');
    const activationUrl=newInvite(user.id);log(a.id,'reissue-invitation',salon.id);send(res,200,{activationUrl});return true;
   }
-  if(!match[2]&&req.method==='PATCH'){const p=planFields(await body(req));db.exec('BEGIN IMMEDIATE');try{db.prepare('INSERT INTO subscriptions VALUES (?,?,?,?) ON CONFLICT(business_id) DO UPDATE SET plan=excluded.plan,status=excluded.status,expires=excluded.expires').run(salon.id,p.plan,p.status,p.expires);db.prepare('UPDATE businesses SET active=? WHERE id=?').run(p.status==='suspended'?0:1,salon.id);db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE business_id=?)').run(salon.id);log(a.id,'subscription:'+p.status,salon.id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}send(res,200,{ok:true});return true;}
+  if(!match[2]&&req.method==='PATCH'){const b=await body(req),p=planFields(b);if(b.offlineHours!==undefined){const h=Number(b.offlineHours);if(!OFFLINE_HOURS.includes(h))throw new ApiError(400,'Choose a supported offline period');setOfflineHours(db,salon.id,h);log(a.id,'offline-hours:'+h,salon.id)}db.exec('BEGIN IMMEDIATE');try{db.prepare('INSERT INTO subscriptions VALUES (?,?,?,?) ON CONFLICT(business_id) DO UPDATE SET plan=excluded.plan,status=excluded.status,expires=excluded.expires').run(salon.id,p.plan,p.status,p.expires);db.prepare('UPDATE businesses SET active=? WHERE id=?').run(p.status==='suspended'?0:1,salon.id);db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE business_id=?)').run(salon.id);log(a.id,'subscription:'+p.status,salon.id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}send(res,200,{ok:true});return true;}
  }
  throw new ApiError(404,'Not found');
 }

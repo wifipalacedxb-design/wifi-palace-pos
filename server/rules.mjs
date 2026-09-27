@@ -1,6 +1,7 @@
 import {hash,audit,nextNumber,documentNumber} from './store.mjs';
 import {ApiError,fail,text,required,amount,image,get} from './check.mjs';
 import {businessModule,kindsFor,CORE_OWNER_KINDS} from './modules.mjs';
+import {recordChange,claimTillNumber} from './sync.mjs';
 export {ApiError};
 function validate(db,u,kind,key,data,old){
  const salon=u.business_id,mod=businessModule(u.business_type||'salon');
@@ -17,9 +18,9 @@ function validate(db,u,kind,key,data,old){
  if(kind==='sales'){
   if(old){if(u.role!=='owner')fail('Only the salon owner can refund a sale',403);if(old.status!=='Paid'||data.status!=='Refunded')fail('Saved sales cannot be edited',409);return{...old,status:'Refunded',refundReason:required(data.refundReason,500),refundDate:new Date().toISOString(),refundedBy:u.id,creditNote:documentNumber('CN',nextNumber(db,salon,'credit-note'))};}
   if(data.status!=='Paid'||!Array.isArray(data.items)||data.items.length<1||data.items.length>100)fail('Invalid sale');
-  const shop=get(db,salon,'settings','singleton');
-  const items=data.items.map(i=>{const service=get(db,salon,mod.catalogKind,i.id);if(!service)fail('A service was removed. Review this pending bill.',409);if(i.price!==service.price)fail('A service price changed. Review this pending bill.',409);const q=i.qty,kg=service.unit==='kg';if(typeof q!=='number'||!Number.isFinite(q)||q<=0||q>(kg?1000:(mod.maxPieces||100))||(kg?Math.round(q*100)!==q*100:!Number.isInteger(q)))fail('Invalid quantity');return{...service,qty:q}});
-  const sub=amount(items.reduce((n,i)=>n+Math.round(i.price*i.qty),0)),off=amount(data.off);if(off>sub)fail('Discount exceeds subtotal');const tax=Math.round((sub-off)*shop.tax/100),total=sub-off+tax;
+  const settingsRow=get(db,salon,'settings','singleton'),shop={...settingsRow,logo:''}; // the logo is printed from current settings, not stored per sale
+  const items=data.items.map(i=>{const service=get(db,salon,mod.catalogKind,i.id);if(!service)fail('A service was removed. Review this pending bill.',409);if(i.price!==service.price)fail('A service price changed. Review this pending bill.',409);const q=i.qty,kg=service.unit==='kg';if(typeof q!=='number'||!Number.isFinite(q)||q<=0||q>(kg?1000:(mod.maxPieces||100))||(kg?Math.round(q*100)!==q*100:!Number.isInteger(q)))fail('Invalid quantity');const line={id:service.id,name:service.name};for(const k of ['category','unit','type'])if(service[k]!==undefined)line[k]=service[k];line.price=service.price;line.qty=q;return line});
+  const sub=amount(items.reduce((n,i)=>n+Math.round(i.price*i.qty),0)),off=amount(data.off);if(off>sub)fail('Discount exceeds subtotal');const tax=Math.round((sub-off)*settingsRow.tax/100),total=sub-off+tax;
   if(data.total!==total||data.tax!==tax||data.sub!==sub)fail('Bill totals differ from the cloud catalogue or tax settings. Review before syncing.',409);
   // Credit (account) sales: only business types that keep customer accounts (grocery khata); nothing is collected now.
   const credit=data.method==='Credit (account)';
@@ -39,7 +40,7 @@ function validate(db,u,kind,key,data,old){
   if(data.staffId){const stylist=get(db,salon,'staff',data.staffId);if(!stylist)fail('Stylist no longer exists',409);const rate=stylist.commissionBps||0;if(data.commissionBps!==rate)fail('Stylist commission changed. Review this pending sale.',409);commission={staffId:stylist.id,commissionBps:rate,commissionAmount:Math.round((sub-off)*rate/10000)};}
   // The tax invoice number is issued here, in upload order, so numbers are sequential with no gaps even when bills were made offline.
   const ref=text(data.ref??'',100);
-  return {...commission,...(ref?{ref}:{}),id:key,number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:shop.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:credit?0:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
+  return {...commission,...(ref?{ref}:{}),id:key,number:claimTillNumber(db,salon,data.number)?data.number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:settingsRow.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:credit?0:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
  }
  fail('Unknown record type');
 }
@@ -59,6 +60,7 @@ export function operation(db,u,op){
   if(op.action==='delete'){if(!mod.deletable.includes(op.kind)||u.role!=='owner')fail('Deleting this record is not permitted',403);if(!old)fail('Record no longer exists',409)}
   const data=op.action==='delete'?null:validate(db,u,op.kind,op.key,op.data,old);
   db.prepare('INSERT INTO records VALUES (?,?,?,?,?) ON CONFLICT(business_id,kind,id) DO UPDATE SET version=excluded.version,data=excluded.data').run(u.business_id,op.kind,op.key,version+1,data===null?null:JSON.stringify(data));
+  recordChange(db,u.business_id,op.kind,op.key);
   const result={id:op.id,kind:op.kind,key:op.key,version:version+1,data};
   db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(u.business_id,u.id,op.id,digest,JSON.stringify(result));audit(db,u,op.action+':'+op.kind,op.key);db.exec('COMMIT');return result;
  }catch(e){db.exec('ROLLBACK');throw e;}

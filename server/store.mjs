@@ -1,3 +1,4 @@
+import {initSync} from './sync.mjs';
 import {DatabaseSync,backup} from 'node:sqlite';
 import {mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS operations(business_id TEXT NOT NULL,user_id TEXT NOT
 CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY AUTOINCREMENT,business_id TEXT NOT NULL,user_id TEXT NOT NULL,action TEXT NOT NULL,entity TEXT NOT NULL,at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS counters(business_id TEXT NOT NULL REFERENCES businesses(id),name TEXT NOT NULL,value INTEGER NOT NULL,PRIMARY KEY(business_id,name));
 CREATE TABLE IF NOT EXISTS login_attempts(key TEXT PRIMARY KEY,count INTEGER NOT NULL,until INTEGER NOT NULL);
-`);return db;}
+`);initSync(db);return db;}
 export const initial=(name,type='salon')=>({version:1,vendor:{logo:''},settings:{name,phone:'',address:'',trn:'',tax:0,logo:''},staff:[],customers:[],sales:[],...businessModule(type).seed(name)});
 export const businessTypeOf=(db,business)=>db.prepare('SELECT type FROM businesses WHERE id=?').get(business)?.type||'salon';
 export function seed(db,salon,name,type='salon'){const state=initial(name,type);for(const [kind,data] of Object.entries(state)){if(kind==='version')continue;for(const item of (Array.isArray(data)?data:[data]))db.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run(salon,kind,item.id||'singleton',1,JSON.stringify(item));}}

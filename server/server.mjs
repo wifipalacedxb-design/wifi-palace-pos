@@ -9,6 +9,7 @@ import {initProvider,providerRoute,subscriptionAllowed} from './provider.mjs';
 import {initFinance,financeRoute} from './finance.mjs';
 import {initSignup,signupRoute,signupMailer} from './signup.mjs';
 import {initRecovery,recoveryRoute,recoveryMailer} from './recovery.mjs';
+import {recentState,changesSince,registerTill,offlineHours,HISTORY_DAYS} from './sync.mjs';
 const root=join(dirname(fileURLToPath(import.meta.url)),'..');
 export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080'}={}){
  const db=openStore(file),secure=origin.startsWith('https://'),dummy=await passwordHash('dummy-not-a-real-password-123');
@@ -19,7 +20,7 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
  if(!secure&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))throw Error('PUBLIC_ORIGIN must use HTTPS except for local development.');
  function send(res,status,data,extra={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra});res.end(JSON.stringify(data))}
  const owner=u=>{if(u.role!=='owner')throw new ApiError(403,'Owner permission required')};
- const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',name:u.name,email:u.email,role:u.role});
+ const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',offlineHours:offlineHours(db,u.business_id),name:u.name,email:u.email,role:u.role});
  async function body(req){let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>2000000)throw new ApiError(413,'Request exceeds 2 MB');chunks.push(c)}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}')}catch{throw new ApiError(400,'Invalid JSON')}}
  function limited(key,max=10){const now=Date.now(),r=db.prepare('SELECT * FROM login_attempts WHERE key=?').get(key);if(r&&r.until>now&&r.count>=max)throw new ApiError(429,'Too many attempts. Try again in 15 minutes.');db.prepare('INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count,until=excluded.until').run(key,r&&r.until>now?r.count+1:1,r&&r.until>now?r.until:now+900000)}
  const server=createServer(async(req,res)=>{
@@ -55,6 +56,8 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
    if(await financeRoute({db,u,req,res,path,body,send}))return;
    if(path==='/api/me'&&req.method==='GET'){send(res,200,{user:publicUser(u),csrf:u.csrf});return}
    if(path==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(hash(token));send(res,200,{ok:true},{'Set-Cookie':`salon_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure?'; Secure':''}`});return}
+   if((path==='/api/state'||path==='/api/changes')&&req.method==='GET'){const q=new URL(req.url,'http://local').searchParams;if(path==='/api/changes'||q.has('days')){const days=Math.min(400,Math.max(1,Number(q.get('days'))||HISTORY_DAYS));send(res,200,path==='/api/changes'?changesSince(db,u,Number(q.get('after')),days):recentState(db,u,days));return}}
+   if(path==='/api/till'&&req.method==='POST'){const b=await body(req);send(res,200,registerTill(db,u,b.device,b.name));return}
    if(path==='/api/state'&&req.method==='GET'){const s=snapshot(db,u.business_id);if(u.role==='cashier'){s.state.sales=s.state.sales.filter(x=>x.createdBy===u.id);for(const key of Object.keys(s.revisions))if(key.startsWith('sales:')&&!s.state.sales.some(x=>'sales:'+x.id===key))delete s.revisions[key];}send(res,200,s);return}
    if(path==='/api/sync'&&req.method==='POST'){send(res,200,operation(db,u,await body(req)));return}
    if(path==='/api/users'&&req.method==='GET'){owner(u);send(res,200,db.prepare('SELECT id,name,email,role,active FROM users WHERE business_id=?').all(u.business_id));return}

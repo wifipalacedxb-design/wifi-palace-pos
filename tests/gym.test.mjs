@@ -46,7 +46,7 @@ test('memberships come from a paid sale, one per sale line, and freeze extends t
   const m=f.run(f.desk,put('gym_memberships','ms1',{customerId:'m1',planId:'g2',start:addDays(today,-5),status:'Active',saleId:'s1',end:'2099-01-01'})).data;
   assert.equal(m.end,addDays(today,24));assert.equal(m.plan,'Monthly membership');assert.equal(m.customer,'Sara');assert.equal(m.complimentary,false);
   assert.throws(()=>f.run(f.desk,put('gym_memberships','ms2',{customerId:'m1',planId:'g2',start:today,status:'Active',saleId:'s1'})),/already been used/);
-  assert.throws(()=>f.run(f.desk,put('gym_memberships','ms2',{customerId:'m1',planId:'g2',start:addDays(today,-30),status:'Active',saleId:'s1'})),/Start date/);
+  assert.throws(()=>f.run(f.desk,put('gym_memberships','ms2',{customerId:'m1',planId:'g2',start:addDays(today,-40),status:'Active',saleId:'s1'})),/Start date/);
   // Owner can give a complimentary membership.
   assert.equal(f.run(f.owner,put('gym_memberships','comp',{customerId:'m2',planId:'g1',start:today,status:'Active'})).data.complimentary,true);
   // Freezing before the membership started is refused. Freeze from 2 days ago, unfreeze today → +2 days.
