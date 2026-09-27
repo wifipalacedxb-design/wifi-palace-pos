@@ -29,12 +29,14 @@ export function setOfflineHours(db,business,hours){if(!OFFLINE_HOURS.includes(ho
 function when(kind,d){
  if(kind==='sales'){const t=Math.max(Date.parse(d.date)||0,Date.parse(d.refundDate||'')||0);return t}
  if(['grocery_stock','grocery_payments','gym_checkins'].includes(kind))return Date.parse(d.at)||0;
+ if(kind==='restaurant_kots')return Date.parse(d.at)||0;
+ if(kind==='restaurant_orders')return ['closed','cancelled','merged'].includes(d.status)?Date.parse(d.closedAt||d.opened)||0:Infinity;
  if(kind==='laundry_orders')return ['Delivered','Cancelled'].includes(d.status)?Date.parse(d.history?.at(-1)?.at||d.received)||0:Infinity;
  return Infinity;
 }
 const historic=(kind,d,cutoff)=>d&&when(kind,d)<cutoff;
 // Receipts and item lines stay small on devices: the logo lives once in settings, not in every sale.
-function slim(kind,d){if(kind!=='sales'||!d)return d;return{...d,shop:d.shop?{...d.shop,logo:''}:d.shop,items:(d.items||[]).map(i=>{const l={id:i.id,name:i.name};for(const k of ['category','unit','type'])if(i[k]!==undefined)l[k]=i[k];l.price=i.price;if(i.listPrice!==undefined)l.listPrice=i.listPrice;l.qty=i.qty;return l})}}
+function slim(kind,d){if(kind!=='sales'||!d)return d;return{...d,shop:d.shop?{...d.shop,logo:''}:d.shop,items:(d.items||[]).map(i=>{const l={id:i.id,name:i.name};for(const k of ['category','unit','type'])if(i[k]!==undefined)l[k]=i[k];if(i.options)l.options=i.options;if(i.note)l.note=i.note;l.price=i.price;if(i.listPrice!==undefined)l.listPrice=i.listPrice;l.qty=i.qty;return l})}}
 const visibleTo=(u,kind,d)=>!(u.role==='cashier'&&kind==='sales'&&d&&d.createdBy!==u.id);
 
 export function summaryFor(db,business,type){const m=businessModule(type);return typeof m.summary==='function'?m.summary(db,business):null}
