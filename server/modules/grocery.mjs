@@ -8,8 +8,11 @@ import {fail,text,required,amount,get,OFFLINE_GRACE_DAYS} from '../check.mjs';
 
 export const GROCERY_CATEGORIES=['Fruits & vegetables','Dairy & eggs','Bakery','Meat & fish','Rice, flour & grains','Cooking & spices','Snacks & sweets','Drinks','Frozen','Household & cleaning','Personal care','Baby','Tobacco','Other'];
 const DAY=86400000;
-const qty=(v,unit,label='Quantity',allowNegative=false)=>{if(typeof v!=='number'||!Number.isFinite(v)||v===0||Math.abs(v)>100000||(!allowNegative&&v<0))fail(label+' must be a non-zero number');if(unit==='kg'?Math.round(v*1000)!==v*1000:!Number.isInteger(v))fail(unit==='kg'?label+' allows up to 3 decimals (grams)':label+' must be whole pieces');return v};
+const qty=(v,unit,label='Quantity',allowNegative=false)=>{if(typeof v!=='number'||!Number.isFinite(v)||v===0||Math.abs(v)>100000||(!allowNegative&&v<0))fail(label+' must be a non-zero number');if(unit==='kg'?Math.abs(Math.round(v*1000)-v*1000)>1e-6:!Number.isInteger(v))fail(unit==='kg'?label+' allows up to 3 decimals (grams)':label+' must be whole pieces');return v};
 const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-OFFLINE_GRACE_DAYS*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
+// Scale code (PLU) keyed into the label scale for weighed products: 1 to 6 digits, stored without leading zeros.
+const plu=v=>{if(v===undefined||v===null||v==='')return '';const s=String(v).trim();if(!/^\d{1,6}$/.test(s))fail('Scale code (PLU) must be 1 to 6 digits');return String(Number(s))};
+export const SCALE_DEFAULT={prefix:'21',codeDigits:5,value:'weight'};
 const barcode=v=>{const b=text(v??'',40).replace(/\s+/g,'');if(b&&!/^[A-Za-z0-9-]{3,40}$/.test(b))fail('Barcode may only contain letters, numbers and dashes');return b};
 
 // What a customer owes: unrefunded credit sales minus payments received.
@@ -24,8 +27,8 @@ export const grocery={
  type:'grocery',
  label:'Grocery & baqala',
  catalogKind:'grocery_items',
- kinds:['grocery_items','grocery_stock','grocery_payments'],
- ownerKinds:['grocery_items'],
+ kinds:['grocery_items','grocery_stock','grocery_payments','grocery_config'],
+ ownerKinds:['grocery_items','grocery_config'],
  deletable:['grocery_items'],
  creditSales:true,
  maxPieces:1000,
@@ -41,7 +44,8 @@ export const grocery={
    {id:'p8',name:'Soft drink can',barcode:'',category:'Drinks',unit:'piece',price:250,cost:0,minStock:24}
   ],
   staff:[{id:'t1',name:'Cashier 1'}],
-  grocery_stock:[],grocery_payments:[]
+  grocery_stock:[],grocery_payments:[],
+  grocery_config:[{id:'config',scale:{...SCALE_DEFAULT}}]
  }),
  // Authoritative totals from every till's synced records; devices add their own unsynced changes on top.
  summary(db,business){
@@ -58,8 +62,20 @@ export const grocery={
    if(old&&old.unit!==data.unit)fail('A product cannot change between piece and kg. Add a new product instead.',409);
    const code=barcode(data.barcode);
    if(code)for(const r of db.prepare("SELECT id,data FROM records WHERE business_id=? AND kind='grocery_items' AND data IS NOT NULL AND id<>?").all(business,key))if(JSON.parse(r.data).barcode===code)fail('Barcode '+code+' is already used by '+JSON.parse(r.data).name,409);
+   const scaleCode=plu(data.plu);if(scaleCode&&data.unit!=='kg')fail('Only products sold by weight (kg) can have a scale code');
+   if(scaleCode)for(const r of db.prepare("SELECT id,data FROM records WHERE business_id=? AND kind='grocery_items' AND data IS NOT NULL AND id<>?").all(business,key))if(JSON.parse(r.data).plu===scaleCode)fail('Scale code '+scaleCode+' is already used by '+JSON.parse(r.data).name,409);
    const minStock=data.minStock??0;if(typeof minStock!=='number'||!Number.isFinite(minStock)||minStock<0||minStock>100000)fail('Low-stock level must be 0 or more');
-   return{id:key,name:required(data.name,100),barcode:code,category:data.category,unit:data.unit,price:amount(data.price),cost:amount(data.cost??0),minStock};
+   return{id:key,name:required(data.name,100),barcode:code,category:data.category,unit:data.unit,price:amount(data.price),cost:amount(data.cost??0),minStock,...(scaleCode?{plu:scaleCode}:{})};
+  }
+  // Barcode label scale: EAN-13 = prefix + product scale code + weight (grams) or price (fils) + check digit.
+  if(kind==='grocery_config'){
+   if(key!=='config')fail('Invalid settings record');
+   const sc=data.scale||{},prefix=String(sc.prefix??'').trim(),digits=sc.codeDigits;
+   if(!/^\d{1,2}$/.test(prefix)||prefix[0]!=='2')fail('Scale label prefix must be 2 or 20 to 29');
+   if(![4,5,6].includes(digits))fail('Scale code length must be 4, 5 or 6 digits');
+   if(12-prefix.length-digits<4)fail('This format leaves too few digits for the weight or price');
+   if(!['weight','price'].includes(sc.value))fail('Labels carry either the weight or the price');
+   return{id:'config',scale:{prefix,codeDigits:digits,value:sc.value}};
   }
   if(kind==='grocery_stock'){
    if(old)fail('Stock entries cannot be changed. Add a correction instead.',409);
