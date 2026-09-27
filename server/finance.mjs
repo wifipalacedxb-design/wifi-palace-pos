@@ -14,7 +14,7 @@ export function financeReport(db,salon,date){
  dateKey(date);
  const sales=db.prepare("SELECT data FROM records WHERE business_id=? AND kind='sales' AND data IS NOT NULL ORDER BY id").all(salon).map(r=>JSON.parse(r.data));
  const expenses=db.prepare('SELECT id,date,amount,method,category,note,created_at,voided_at,void_reason FROM expenses WHERE business_id=? AND date=? ORDER BY created_at,id').all(salon,date);
- const totals={sales:0,refunds:0,netSalesBeforeTax:0,cashSales:0,cashRefunds:0,cardSales:0,cardRefunds:0,expenses:0,cashExpenses:0,commission:0,legacySales:0};
+ const totals={sales:0,refunds:0,netSalesBeforeTax:0,cashSales:0,cashRefunds:0,cardSales:0,cardRefunds:0,expenses:0,cashExpenses:0,commission:0,legacySales:0,creditSales:0,creditRefunds:0,creditCollectedCash:0,creditCollectedCard:0};
  const commissions=new Map(),events=[];
  for(const s of sales){const sold=businessDay(s.date)===date,refunded=s.status==='Refunded'&&businessDay(s.refundDate)===date;if(!sold&&!refunded)continue;
   events.push([s.id,sold?s.total:0,refunded?s.total:0,s.method,s.commissionAmount??null,s.staffId||'',s.staff,...(s.method==='Split'?[s.cashAmount,s.cardAmount]:[])]);
@@ -22,6 +22,10 @@ export function financeReport(db,salon,date){
   if(refunded){totals.refunds+=s.total;totals.netSalesBeforeTax-=s.sub-s.off;totals.cashRefunds+=s.method==='Split'?s.cashAmount:s.method==='Cash'?s.total:0;totals.cardRefunds+=s.method==='Split'?s.cardAmount:s.method==='Card (external terminal)'?s.total:0}
   if(Number.isSafeInteger(s.commissionAmount)){const row=commissions.get(s.staffId)||{id:s.staffId,name:s.staff,earned:0,reversed:0};if(sold)row.earned+=s.commissionAmount;if(refunded)row.reversed+=s.commissionAmount;commissions.set(s.staffId,row);totals.commission+=(sold?s.commissionAmount:0)-(refunded?s.commissionAmount:0)}
  }
+ // Customer credit (khata): sales on account are revenue but not cash; money collected later is cash/card in hand.
+ for(const s of sales){if(s.method!=='Credit (account)')continue;if(businessDay(s.date)===date)totals.creditSales+=s.total;if(s.status==='Refunded'&&businessDay(s.refundDate)===date)totals.creditRefunds+=s.total}
+ const payments=db.prepare("SELECT data FROM records WHERE business_id=? AND kind='grocery_payments' AND data IS NOT NULL ORDER BY id").all(salon).map(r=>JSON.parse(r.data)).filter(p=>businessDay(p.at)===date);
+ for(const p of payments){if(p.method==='Cash')totals.creditCollectedCash+=p.amount;else totals.creditCollectedCard+=p.amount;events.push(['payment',p.id,p.amount,p.method])}
  for(const e of expenses){if(e.voided_at)continue;totals.expenses+=e.amount;if(e.method==='Cash')totals.cashExpenses+=e.amount}
  const fingerprint=createHash('sha256').update(JSON.stringify({events,expenses})).digest('hex');
  const row=db.prepare('SELECT data FROM day_closings WHERE business_id=? AND date=?').get(salon,date),closing=row?JSON.parse(row.data):null;
@@ -72,7 +76,7 @@ export async function financeRoute({db,u,req,res,path,body,send}){
    const r=financeReport(db,u.business_id,date);
    if(r.closing){if(r.closing.id===requestId&&['opening','cashIn','cashOut','counted','note'].every(k=>r.closing[k]===({opening,cashIn,cashOut,counted,note})[k])){db.exec('COMMIT');send(res,200,r.closing);return true}fail(409,'This day already has a closing. Later activity is shown as an adjustment; the original closing stays unchanged.')}
    if(b.fingerprint!==r.fingerprint)fail(409,'Sales or expenses changed. Refresh the report and recount before closing.');
-   const expected=opening+r.totals.cashSales-r.totals.cashRefunds-r.totals.cashExpenses+cashIn-cashOut;
+   const expected=opening+r.totals.cashSales-r.totals.cashRefunds+r.totals.creditCollectedCash-r.totals.cashExpenses+cashIn-cashOut;
    const closing={id:requestId,date,opening,cashIn,cashOut,counted,note,expected,variance:counted-expected,fingerprint:r.fingerprint,totals:r.totals,closedBy:u.name,closedAt:new Date().toISOString()};
    db.prepare('INSERT INTO day_closings VALUES (?,?,?)').run(u.business_id,date,JSON.stringify(closing));audit(db,u,'cash-day-closed',date);db.exec('COMMIT');send(res,201,closing);return true;
   }catch(e){db.exec('ROLLBACK');throw e}

@@ -25,7 +25,8 @@
   <details><summary class="helper">Show as table</summary><table><tr><th>Day</th><th>${e(title)}</th></tr>${data.slice().reverse().map(r=>`<tr><td>${e(r.label)}</td><td>${e(fmt(r.v))}</td></tr>`).join('')}</table></details></section>`;
  }
  // Net collections per day: sales on their day, refunds subtracted on their refund day.
- function collections(sales){const m=new Map(),add=(d,v)=>m.set(d,(m.get(d)||0)+v);for(const s of sales||[]){add(localDay(new Date(s.date)),s.total);if(s.status==='Refunded'&&s.refundDate)add(localDay(new Date(s.refundDate)),-s.total)}return d=>m.get(d)||0}
+ // Credit (account) sales are not collected money; payments received on accounts are.
+ function collections(sales,payments=[]){const m=new Map(),add=(d,v)=>m.set(d,(m.get(d)||0)+v);for(const s of sales||[]){if(s.method==='Credit (account)')continue;add(localDay(new Date(s.date)),s.total);if(s.status==='Refunded'&&s.refundDate)add(localDay(new Date(s.refundDate)),-s.total)}for(const p of payments||[])add(localDay(new Date(p.at)),p.amount);return d=>m.get(d)||0}
  function countBy(list,dateOf,keyOf){const m=new Map();for(const x of list||[]){const d=localDay(new Date(dateOf(x)));if(!m.has(d))m.set(d,new Set());m.get(d).add(keyOf?keyOf(x):m.get(d).size)}return d=>m.get(d)?.size||0}
  function section(charts,redraw){
   return `<div class="row" style="margin:6px 0 10px"><h3 style="margin:0">Trends</h3><div class="actions" style="margin:0">${[14,30].map(n=>`<button class="${days===n?'primary':''}" onclick="TrendCharts.days(${n},'${e(redraw)}')">${n} days</button>`).join('')}</div></div>
