@@ -85,7 +85,7 @@ export function retailValidate({db,business,kind,key,data,old,u},{categories=GRO
   if(kind==='grocery_config'){
    if(key!=='config')fail('Invalid settings record');
    const sc=data.scale||{},prefix=String(sc.prefix??'').trim(),digits=sc.codeDigits;
-   if(!/^\d{1,2}$/.test(prefix)||prefix[0]!=='2')fail('Scale label prefix must be 2 or 20 to 29');
+   if(!/^\d{1,2}$/.test(prefix))fail('Scale label prefix must be 1 or 2 digits (e.g. 21 or 99)');
    if(![4,5,6].includes(digits))fail('Scale code length must be 4, 5 or 6 digits');
    if(12-prefix.length-digits<4)fail('This format leaves too few digits for the weight or price');
    if(!['weight','price'].includes(sc.value))fail('Labels carry either the weight or the price');

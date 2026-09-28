@@ -10,9 +10,10 @@ async function setup(){const dir=mkdtempSync(join(tmpdir(),'scale-')),db=openSto
  const u={id:r.userId,business_id:r.businessId,business_type:'grocery',role:'owner'};return{db,r,u,run:op=>operation(db,u,op),done:()=>{db.close();rmSync(dir,{recursive:true,force:true})}}}
 test('scale settings and product scale codes are validated',async()=>{const f=await setup();try{
  assert.deepEqual(snapshot(f.db,f.r.businessId).state.grocery_config[0].scale,{prefix:'21',codeDigits:5,value:'weight'});
- assert.throws(()=>f.run(put('grocery_config','config',{scale:{prefix:'12',codeDigits:5,value:'weight'}},1)),/prefix/);
- assert.throws(()=>f.run(put('grocery_config','config',{scale:{prefix:'22',codeDigits:7,value:'weight'}},1)),/length/);
- assert.equal(f.run(put('grocery_config','config',{scale:{prefix:'2',codeDigits:6,value:'price'}},1)).data.scale.prefix,'2');
+ assert.throws(()=>f.run(put('grocery_config','config',{scale:{prefix:'123',codeDigits:5,value:'weight'}},1)),/prefix/);
+ assert.equal(f.run(put('grocery_config','config',{scale:{prefix:'99',codeDigits:5,value:'weight'}},1)).data.scale.prefix,'99');
+ assert.throws(()=>f.run(put('grocery_config','config',{scale:{prefix:'22',codeDigits:7,value:'weight'}},2)),/length/);
+ assert.equal(f.run(put('grocery_config','config',{scale:{prefix:'2',codeDigits:6,value:'price'}},2)).data.scale.prefix,'2');
  const base={name:'Tomatoes',barcode:'',category:'Fruits & vegetables',unit:'kg',price:450,cost:0,minStock:0};
  assert.equal(f.run(put('grocery_items','p5',{...base,plu:'00012'},1)).data.plu,'12');
  assert.throws(()=>f.run(put('grocery_items','x',{...base,name:'Onion',plu:'12'})),/already used by Tomatoes/);
