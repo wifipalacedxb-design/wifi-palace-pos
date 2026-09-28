@@ -8,7 +8,7 @@ import {fail,text,required,amount,get,OFFLINE_GRACE_DAYS} from '../check.mjs';
 
 export const GROCERY_CATEGORIES=['Fruits & vegetables','Dairy & eggs','Bakery','Meat & fish','Rice, flour & grains','Cooking & spices','Snacks & sweets','Drinks','Frozen','Household & cleaning','Personal care','Baby','Tobacco','Other'];
 const DAY=86400000;
-const qty=(v,unit,label='Quantity',allowNegative=false)=>{if(typeof v!=='number'||!Number.isFinite(v)||v===0||Math.abs(v)>100000||(!allowNegative&&v<0))fail(label+' must be a non-zero number');if(unit==='kg'?Math.abs(Math.round(v*1000)-v*1000)>1e-6:!Number.isInteger(v))fail(unit==='kg'?label+' allows up to 3 decimals (grams)':label+' must be whole pieces');return v};
+const qty=(v,unit,label='Quantity',allowNegative=false)=>{if(typeof v!=='number'||!Number.isFinite(v)||v===0||Math.abs(v)>100000||(!allowNegative&&v<0))fail(label+' must be a non-zero number');if(unit!=='piece'?Math.abs(Math.round(v*1000)-v*1000)>1e-6:!Number.isInteger(v))fail(unit!=='piece'?label+' allows up to 3 decimals':label+' must be whole pieces');return v};
 const recent=(v,label)=>{const t=Date.parse(v);if(typeof v!=='string'||!Number.isFinite(t)||t>Date.now()+300000||t<Date.now()-OFFLINE_GRACE_DAYS*DAY)fail('Invalid '+label+' time');return new Date(t).toISOString()};
 // Scale code (PLU) keyed into the label scale for weighed products: 1 to 6 digits, stored without leading zeros.
 const plu=v=>{if(v===undefined||v===null||v==='')return '';const s=String(v).trim();if(!/^\d{1,6}$/.test(s))fail('Scale code (PLU) must be 1 to 6 digits');return String(Number(s))};
@@ -60,7 +60,8 @@ export const grocery={
 
 // Shared by grocery and pet shop: products (piece/kg, barcode, scale code), services (pet shop: no stock),
 // stock movements, customer credit payments and label-scale settings.
-export function retailValidate({db,business,kind,key,data,old,u},{categories=GROCERY_CATEGORIES,serviceTypes=null}={}){
+export function retailValidate({db,business,kind,key,data,old,u},{categories=GROCERY_CATEGORIES,serviceTypes=null,units=['piece','kg'],itemExtra=null,configExtra=null,branches=null}={}){
+ const branchIds=branches?branches(db,business):[];
  {
   if(kind==='grocery_items'){
    if(!categories.includes(data.category))fail('Choose a category');
@@ -71,14 +72,14 @@ export function retailValidate({db,business,kind,key,data,old,u},{categories=GRO
     return{id:key,type:'service',serviceType:data.serviceType,name:required(data.name,100),barcode:'',category:data.category,unit:'piece',price:amount(data.price),cost:0,minStock:0,duration:minutes,openPrice:data.openPrice===true};
    }
    if(old?.type==='service')fail('A service cannot become a product. Add a new item instead.',409);
-   if(!['piece','kg'].includes(data.unit))fail('Unit must be piece or kg');
-   if(old&&old.unit!==data.unit)fail('A product cannot change between piece and kg. Add a new product instead.',409);
+   if(!units.includes(data.unit))fail('Unit must be '+units.join(', '));
+   if(old&&old.unit!==data.unit)fail('A product cannot change its unit ('+old.unit+'). Add a new product instead.',409);
    const code=barcode(data.barcode);
    if(code)for(const r of db.prepare("SELECT id,data FROM records WHERE business_id=? AND kind='grocery_items' AND data IS NOT NULL AND id<>?").all(business,key))if(JSON.parse(r.data).barcode===code)fail('Barcode '+code+' is already used by '+JSON.parse(r.data).name,409);
    const scaleCode=plu(data.plu);if(scaleCode&&data.unit!=='kg')fail('Only products sold by weight (kg) can have a scale code');
    if(scaleCode)for(const r of db.prepare("SELECT id,data FROM records WHERE business_id=? AND kind='grocery_items' AND data IS NOT NULL AND id<>?").all(business,key))if(JSON.parse(r.data).plu===scaleCode)fail('Scale code '+scaleCode+' is already used by '+JSON.parse(r.data).name,409);
    const minStock=data.minStock??0;if(typeof minStock!=='number'||!Number.isFinite(minStock)||minStock<0||minStock>100000)fail('Low-stock level must be 0 or more');
-   return{id:key,name:required(data.name,100),barcode:code,category:data.category,unit:data.unit,price:amount(data.price),cost:amount(data.cost??0),minStock,...(scaleCode?{plu:scaleCode}:{})};
+   return{id:key,name:required(data.name,100),barcode:code,category:data.category,unit:data.unit,price:amount(data.price),cost:amount(data.cost??0),minStock,...(scaleCode?{plu:scaleCode}:{}),...(itemExtra?itemExtra({db,business,key,data}):{})};
   }
   // Barcode label scale: EAN-13 = prefix + product scale code + weight (grams) or price (fils) + check digit.
   if(kind==='grocery_config'){
@@ -88,15 +89,18 @@ export function retailValidate({db,business,kind,key,data,old,u},{categories=GRO
    if(![4,5,6].includes(digits))fail('Scale code length must be 4, 5 or 6 digits');
    if(12-prefix.length-digits<4)fail('This format leaves too few digits for the weight or price');
    if(!['weight','price'].includes(sc.value))fail('Labels carry either the weight or the price');
-   return{id:'config',scale:{prefix,codeDigits:digits,value:sc.value}};
+   return{id:'config',scale:{prefix,codeDigits:digits,value:sc.value},...(configExtra?configExtra({db,business,data,old}):{})};
   }
   if(kind==='grocery_stock'){
    if(old)fail('Stock entries cannot be changed. Add a correction instead.',409);
-   if(!['in','adjust'].includes(data.type))fail('Stock entry must be goods in or a count adjustment');
+   const types=branchIds.length?['in','adjust','transfer','assemble']:['in','adjust','assemble'];if(!types.includes(data.type))fail('Invalid stock entry type');
    if(data.type==='adjust'&&u.role!=='owner')fail('Only the owner can adjust stock counts',403);
    const item=get(db,business,'grocery_items',required(data.itemId,100));if(!item)fail('Product must sync before its stock',409);if(item.type==='service')fail('Services have no stock');
-   const e={id:key,type:data.type,itemId:item.id,item:item.name,unit:item.unit,qty:qty(data.qty,item.unit,'Quantity',data.type==='adjust'),at:recent(data.at,'stock'),by:u.id,note:text(data.note??'',200)};
-   if(data.type==='in'){e.cost=amount(data.cost??0);e.supplier=text(data.supplier??'',100);e.invoice=text(data.invoice??'',60);}
+   const e={id:key,type:data.type,itemId:item.id,item:item.name,unit:item.unit,qty:qty(data.qty,item.unit,'Quantity',data.type==='adjust'||data.type==='assemble'),at:recent(data.at,'stock'),by:u.id,note:text(data.note??'',200)};
+   // Several branches: every movement belongs to one branch; a transfer moves stock from it to another.
+   if(branchIds.length){if(!branchIds.includes(data.branch))fail('Choose the branch');e.branch=data.branch}
+   if(data.type==='transfer'){if(!branchIds.includes(data.toBranch)||data.toBranch===data.branch)fail('Choose another branch to transfer to');e.toBranch=data.toBranch;e.reason=text(data.reason??'',200)}
+   else if(data.type==='in'){e.cost=amount(data.cost??0);e.supplier=text(data.supplier??'',100);e.invoice=text(data.invoice??'',60);}
    else e.reason=required(data.reason??'',200);
    return e;
   }

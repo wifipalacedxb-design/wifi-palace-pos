@@ -26,7 +26,7 @@ test('grocery products: barcodes unique, units fixed, owner-only, big quantities
   f.run(f.owner,put('grocery_items','x',{name:'Pepsi 330ml',barcode:' 6281 0001 ',category:'Drinks',unit:'piece',price:250,cost:180,minStock:24}));
   assert.equal(snapshot(f.db,f.g.businessId).state.grocery_items.find(i=>i.id==='x').barcode,'62810001');
   assert.throws(()=>f.run(f.owner,put('grocery_items','y',{name:'Copy',barcode:'62810001',category:'Drinks',unit:'piece',price:1})),/already used by Pepsi/);
-  assert.throws(()=>f.run(f.owner,put('grocery_items','x',{name:'Pepsi',barcode:'62810001',category:'Drinks',unit:'kg',price:250},1)),/cannot change between piece and kg/);
+  assert.throws(()=>f.run(f.owner,put('grocery_items','x',{name:'Pepsi',barcode:'62810001',category:'Drinks',unit:'kg',price:250},1)),/cannot change its unit/);
   assert.throws(()=>f.run(f.owner,put('grocery_items','y',{name:'Bad',barcode:'a b!',category:'Drinks',unit:'piece',price:1})),/Barcode/);
   // 240 cans (above the 100-piece limit other types keep) and 1.25 kg tomatoes on one bill
   const r=f.run(f.cashier,put('sales','s1',sale([{id:'x',price:250,qty:240},{id:'p5',price:450,qty:1.25}]))).data;

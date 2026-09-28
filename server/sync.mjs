@@ -29,6 +29,7 @@ export function setOfflineHours(db,business,hours){if(!OFFLINE_HOURS.includes(ho
 function when(kind,d){
  if(kind==='sales'){const t=Math.max(Date.parse(d.date)||0,Date.parse(d.refundDate||'')||0);return t}
  if(['grocery_stock','grocery_payments','gym_checkins'].includes(kind))return Date.parse(d.at)||0;
+ if(kind==='perfume_points')return Date.parse(d.at)||0;
  if(kind==='pet_stays')return ['Out','Cancelled'].includes(d.status)?Date.parse(d.checkOut||d.until)||0:Infinity;
  if(kind==='restaurant_kots')return Date.parse(d.at)||0;
  if(kind==='restaurant_orders')return ['closed','cancelled','merged'].includes(d.status)?Date.parse(d.closedAt||d.opened)||0:Infinity;

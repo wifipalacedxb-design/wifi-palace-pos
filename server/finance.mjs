@@ -44,7 +44,7 @@ export function staffReport(db,business,from,to){
   const key=sale.staffId?'id:'+sale.staffId:byUser?'user:'+sale.createdBy:'legacy:'+(sale.staff||'Unassigned');
   let row=rows.get(key);if(!row){row={id:key,name:byUser?users.get(sale.createdBy):sale.staff||'Unassigned',legacy:!sale.staffId&&!byUser,bills:0,services:0,gross:0,discounts:0,refunds:0,net:0,sessions:0,details:[]};rows.set(key,row);}
   const value=sale.sub-sale.off,lines=sale.items.map(i=>i.name+' × '+i.qty).join('; ');
-  if(sold){row.bills++;row.services+=sale.items.reduce((n,i)=>n+(i.unit==='kg'?1:i.qty),0);row.gross+=sale.sub;row.discounts+=sale.off;row.net+=value;row.details.push({id:sale.id,number:sale.number,date:sale.date,type:'Sale',customer:sale.customer,services:lines,method:sale.method,beforeTax:value,total:sale.total});}
+  if(sold){row.bills++;row.services+=sale.items.reduce((n,i)=>n+(i.unit&&i.unit!=='piece'?1:i.qty),0);row.gross+=sale.sub;row.discounts+=sale.off;row.net+=value;row.details.push({id:sale.id,number:sale.number,date:sale.date,type:'Sale',customer:sale.customer,services:lines,method:sale.method,beforeTax:value,total:sale.total});}
   if(refunded){row.refunds+=value;row.net-=value;row.details.push({id:sale.id,number:sale.number,date:sale.refundDate,type:'Refund',customer:sale.customer,services:lines,method:sale.method,beforeTax:-value,total:-sale.total});}
  }
  // Gyms: personal-training sessions delivered, credited to the trainer who ran each session.

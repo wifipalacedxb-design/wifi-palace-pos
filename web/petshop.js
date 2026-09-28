@@ -23,7 +23,8 @@
  const paidSale=id=>db.sales.find(s=>s.id===id);
 
  // --- dashboard block (inside the retail dashboard) -------------------------------------------------------
- R.dashboard=()=>{
+ R.ext??={};const EXT=R.ext.petshop={};
+ EXT.dashboard=()=>{
   const t=today(),appts=db.appointments.filter(a=>R.localDay(new Date(a.when))===t&&a.status!=='Cancelled'),inHouse=db.pet_stays.filter(s=>s.status==='In'),due=db.pets.filter(p=>p.active!==false&&dueSoon(p,14));
   return `<div class="layout"><section class="panel"><div class="row"><h3>Grooming today · ${appts.length}</h3><button onclick="navigate('Grooming')">Grooming →</button></div>${appts.length?appts.sort((a,b)=>a.when.localeCompare(b.when)).slice(0,8).map(a=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee"><span>${esc(hm(a.when))} · <b>${esc(a.pet)}</b> · ${esc(a.service)}</span><span class="badge">${esc(a.status)}</span></div>`).join(''):'<div class="empty">No grooming booked today.</div>'}</section>
   <aside class="panel"><div class="row"><h3>In boarding · ${inHouse.length}</h3><button onclick="navigate('Boarding')">Boarding →</button></div>${inHouse.slice(0,8).map(s=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee"><span><b>${esc(s.pet)}</b> ${s.kennel?'· '+esc(s.kennel):''}</span><span class="helper">out ${esc(s.until)}</span></div>`).join('')||'<div class="empty">No pets staying.</div>'}
@@ -139,7 +140,7 @@
   R.bill({customerId:s.customerId,lines:[{id:s.serviceId,qty:n,link,note:s.pet+' · '+n+' '+(s.type==='daycare'?'day(s)':'night(s)')}]});toast('Added to bill')}
 
  // After checkout: mark the appointment completed / the stay as paid with this sale.
- R.onPaid=(sale,links)=>{for(const l of links){if(l.kind==='appointments'){const a=db.appointments.find(x=>x.id===l.id);if(a){a.saleId=sale.id;if(['Booked','Checked in'].includes(a.status))a.status='Completed'}}if(l.kind==='pet_stays'){const s=db.pet_stays.find(x=>x.id===l.id);if(s)s.saleId=sale.id}}};
+ EXT.onPaid=(sale,links)=>{for(const l of links){if(l.kind==='appointments'){const a=db.appointments.find(x=>x.id===l.id);if(a){a.saleId=sale.id;if(['Booked','Checked in'].includes(a.status))a.status='Completed'}}if(l.kind==='pet_stays'){const s=db.pet_stays.find(x=>x.id===l.id);if(s)s.saleId=sale.id}}};
 
  Object.assign(R.screens,{Pets:pets,Grooming:grooming,Boarding:boarding});
  Object.assign(window,{
