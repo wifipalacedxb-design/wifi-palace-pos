@@ -1,7 +1,7 @@
 {
   "name": "wifi-palace-pos-windows",
   "productName": "WiFi Palace POS",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "WiFi Palace POS for Windows",
   "author": "WiFi Palace",
   "homepage": "https://pos.wifipalace.in",
@@ -21,9 +21,37 @@
     "appId": "com.wifipalace.pos",
     "productName": "WiFi Palace POS",
     "copyright": "WiFi Palace",
-    "files": ["main.js", "preload.js", "escpos.js", "offline.html", "build/icon.png"],
-    "directories": {"output": "dist", "buildResources": "build"},
-    "win": {"target": [{"target": "nsis", "arch": ["x64"]}], "icon": "build/icon.png", "artifactName": "WiFiPalacePOS-Setup-${version}.exe"},
-    "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "WiFi Palace POS", "runAfterFinish": true}
+    "files": [
+      "main.js",
+      "preload.js",
+      "escpos.js",
+      "offline.html",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "WiFiPalacePOS-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WiFi Palace POS",
+      "runAfterFinish": true
+    }
   }
 }

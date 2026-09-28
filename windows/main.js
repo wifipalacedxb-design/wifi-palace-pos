@@ -20,8 +20,17 @@ const trusted = url => { try { return new URL(url).origin === ORIGIN; } catch { 
 // Bridge calls are only honoured from the trusted POS page, never from another site or the offline page.
 const fromPos = event => trusted(event.senderFrame?.url || event.sender.getURL());
 
-if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+// One copy of the app at a time. Opening it again brings the existing window forward, or opens a new window
+// if the previous one was closed (never touches a closed window).
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+const alive = () => win && !win.isDestroyed();
+app.on('second-instance', () => {
+  if (!app.isReady()) return;
+  if (!alive()) { createWindow(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+});
 
 function createWindow() {
   win = new BrowserWindow({
@@ -29,21 +38,24 @@ function createWindow() {
     icon: path.join(__dirname, 'build', 'icon.png'), fullscreen: !!config.fullscreen,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false, nodeIntegration: false, partition: 'persist:wifipalace-pos', spellcheck: false }
   });
-  win.once('ready-to-show', () => win.show());
+  const w = win;
+  w.once('ready-to-show', () => { if (!w.isDestroyed()) w.show(); });
+  // Closing the POS window exits the app completely, even if a print job is still pending in the background.
+  w.on('closed', () => { if (win === w) win = null; for (const other of BrowserWindow.getAllWindows()) if (!other.isDestroyed()) other.destroy(); app.quit(); });
   // Stay on the POS site; WhatsApp, email, phone and other links open in their normal apps.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^(https?|mailto|tel|whatsapp):/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!trusted(url) && !url.startsWith('file:')) { e.preventDefault(); if (/^(https?|mailto|tel|whatsapp):/i.test(url)) shell.openExternal(url); } });
   // First start without internet (nothing cached yet): show a friendly retry page instead of a browser error.
-  win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3) win.loadFile(path.join(__dirname, 'offline.html'), { query: { url: POS_URL } }); });
+  win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3 && alive()) win.loadFile(path.join(__dirname, 'offline.html'), { query: { url: POS_URL } }); });
   win.loadURL(POS_URL);
   buildMenu();
 }
 
 function buildMenu() {
-  const toggle = key => () => { config[key] = !config[key]; saveConfig(); if (key === 'fullscreen') win.setFullScreen(config.fullscreen); if (key === 'startWithWindows') app.setLoginItemSettings({ openAtLogin: config.startWithWindows }); buildMenu(); };
+  const toggle = key => () => { config[key] = !config[key]; saveConfig(); if (key === 'fullscreen' && alive()) win.setFullScreen(config.fullscreen); if (key === 'startWithWindows') app.setLoginItemSettings({ openAtLogin: config.startWithWindows }); buildMenu(); };
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'POS', submenu: [
-      { label: 'Reload', accelerator: 'F5', click: () => win.loadURL(POS_URL) },
+      { label: 'Reload', accelerator: 'F5', click: () => { if (alive()) win.loadURL(POS_URL); else createWindow(); } },
       { label: 'Full screen (counter mode)', type: 'checkbox', checked: !!config.fullscreen, accelerator: 'F11', click: toggle('fullscreen') },
       { label: 'Start with Windows', type: 'checkbox', checked: !!config.startWithWindows, click: toggle('startWithWindows') },
       { type: 'separator' },
@@ -52,7 +64,7 @@ function buildMenu() {
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }] },
-    { label: 'Help', submenu: [{ label: 'About WiFi Palace POS', click: () => dialog.showMessageBox(win, { type: 'info', title: 'WiFi Palace POS', message: 'WiFi Palace POS for Windows ' + app.getVersion(), detail: 'Software by WiFi Palace\nsales@wifipalace.com\n' + ORIGIN }) }] }
+    { label: 'Help', submenu: [{ label: 'About WiFi Palace POS', click: () => dialog.showMessageBox(alive() ? win : undefined, { type: 'info', title: 'WiFi Palace POS', message: 'WiFi Palace POS for Windows ' + app.getVersion(), detail: 'Software by WiFi Palace\nsales@wifipalace.com\n' + ORIGIN }) }] }
   ]));
 }
 
@@ -63,32 +75,41 @@ ipcMain.handle('pos:print-network', async (event, job) => {
   await escpos.send(job.host, data, { allowLoopback: process.env.WIFIPOS_TEST_LOOPBACK_PRINTER === '1' });
   return true;
 });
-ipcMain.handle('pos:printers', async event => { if (!fromPos(event)) return []; return (await win.webContents.getPrintersAsync()).map(p => ({ name: p.name, isDefault: !!p.isDefault })); });
+ipcMain.handle('pos:printers', async event => { if (!fromPos(event)) return []; return (await event.sender.getPrintersAsync()).map(p => ({ name: p.name, isDefault: !!p.isDefault })); });
 ipcMain.handle('pos:config', event => (fromPos(event) ? { windowsPrinter: config.windowsPrinter, openDrawer: !!config.openDrawer, version: app.getVersion() } : null));
 ipcMain.handle('pos:set-windows-printer', (event, name) => { if (!fromPos(event)) return false; config.windowsPrinter = typeof name === 'string' ? name.slice(0, 200) : ''; saveConfig(); return true; });
 // Windows/USB printer: print the receipt page silently to the chosen printer (no dialog). Without one, show the dialog.
 ipcMain.handle('pos:print-html', (event, html) => new Promise((resolve, reject) => {
   if (!fromPos(event) || typeof html !== 'string' || html.length > 3000000) { reject(new Error('Not allowed')); return; }
   const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
-  printer.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  let done = false;
+  const finish = (err, ok) => { if (done) return; done = true; clearTimeout(limit); if (!printer.isDestroyed()) printer.destroy(); err ? reject(err) : resolve(ok); };
+  // A printer that is off or missing must never leave a hidden window (and the app) running.
+  const limit = setTimeout(() => finish(new Error('Printing took too long. Check that the printer is on and connected.')), 60000);
+  printer.on('closed', () => finish(new Error('Printing was stopped')));
+  printer.webContents.once('did-fail-load', () => finish(new Error('Receipt could not be prepared for printing')));
   printer.webContents.once('did-finish-load', () => {
     const silent = !!config.windowsPrinter;
-    printer.webContents.print({ silent, deviceName: config.windowsPrinter || undefined, printBackground: true, margins: { marginType: 'none' } }, (ok, reason) => {
-      printer.destroy();
-      if (ok || reason === 'cancelled') resolve(ok); else reject(new Error('Printing failed: ' + reason));
-    });
+    try {
+      printer.webContents.print({ silent, deviceName: config.windowsPrinter || undefined, printBackground: true, margins: { marginType: 'none' } }, (ok, reason) => {
+        if (ok || reason === 'cancelled') finish(null, ok); else finish(new Error('Printing failed: ' + reason));
+      });
+    } catch (e) { finish(e); }
   });
+  printer.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
 }));
 ipcMain.handle('pos:save-file', async (event, { name, text }) => {
   if (!fromPos(event)) return false;
   const safe = String(name || 'export.txt').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
-  const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), safe) });
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  const r = await dialog.showSaveDialog(parent && !parent.isDestroyed() ? parent : undefined, { defaultPath: path.join(app.getPath('documents'), safe) });
   if (r.canceled || !r.filePath) return false;
   fs.writeFileSync(r.filePath, String(text ?? ''), 'utf8');
   return true;
 });
 
 app.whenReady().then(() => {
+  if (!gotLock) return;
   loadConfig();
   // Deny camera, microphone, location and other permissions the POS never needs.
   session.fromPartition('persist:wifipalace-pos').setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'clipboard-sanitized-write'));
