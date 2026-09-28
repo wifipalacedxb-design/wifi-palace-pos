@@ -19,7 +19,8 @@ export const DEMO_SHOPS={
  grocery:{slug:'demo-grocery',name:'Al Madina Baqala',blurb:'Barcode checkout, stock, customer credit (khata), label scale'},
  restaurant:{slug:'demo-restaurant',name:'Spice Route Restaurant',blurb:'Tables, kitchen tickets, kitchen screen, split bills'},
  petshop:{slug:'demo-petshop',name:'Paws & Claws Pet Shop',blurb:'Pet profiles, grooming, boarding, products & stock'},
- perfume:{slug:'demo-perfume',name:'Oud House Perfumes',blurb:'Oils by tola/ml, custom blends, loyalty points, branches'}
+ perfume:{slug:'demo-perfume',name:'Oud House Perfumes',blurb:'Oils by tola/ml, custom blends, loyalty points, branches'},
+ meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'}
 };
 const PEOPLE=[['Fatima Al Mansoori','0501234501'],['Ahmed Khan','0551234502'],['Priya Nair','0521234503'],['Omar Haddad','0561234504'],['Sara Ahmed','0501234505'],['John Mathew','0581234506'],['Aisha Rahman','0541234507'],['Mohammed Ali','0501234508'],['Maria Santos','0551234509'],['Rashid Al Suwaidi','0521234510'],['Noura Saeed','0561234511'],['Vikram Patel','0501234512'],['Layla Hassan','0541234513'],['Yusuf Qureshi','0551234514'],['Elena Petrova','0581234515']];
 
@@ -132,7 +133,24 @@ const BUILD={
    else lines=[...new Set(Array.from({length:c.int(1,3)},()=>c.pick(['p1','p2','p3','b1','b2','o2','o3','g1','w1'])))].map(id=>{const it=c.get('grocery_items',id);return{id,qty:it.unit==='piece'?1:it.unit==='g'?c.int(10,50):c.int(3,12)}});
    const s=c.sale(lines,{date:at(d,c.int(10,22),c.int(0,59)),customerId:cu,extra:{branch}});
    if(cu){const pts=Math.floor((s.sub-s.off)*l.earnPerAed/100);if(pts>0)c.put('perfume_points','earn-'+s.id,{customerId:cu,type:'earn',points:pts,saleId:s.id,at:s.date})}}
- }
+ },
+ meat(c,cust){
+  c.put('staff','t1',{name:'Butcher Rafiq'});
+  const hotel=c.put('customers',uid(),{name:'Hotel Rimal (restaurant account)',phone:'0507654321',dob:''}).id,cafe=c.put('customers',uid(),{name:'Spice Route Restaurant',phone:'0507654322',dob:''}).id;
+  const bd=(daysAgo,animal,desc,weight,cost,outs)=>{const when=at(daysAgo,7),usable=outs.reduce((n,o)=>n+o[1],0),perKg=Math.round(cost/usable);c.put('meat_breakdowns',uid(),{animal,description:desc,supplier:'Al Mawashi',invoice:'AM-'+c.int(1000,9999),weight,cost,outputs:outs.map(([itemId,qty])=>({itemId,qty})),at:when});for(const [itemId,qty] of outs)c.put('grocery_stock',uid(),{type:'in',itemId,qty,cost:perKg,supplier:'Al Mawashi',note:'Breakdown: '+animal+' '+weight+' kg',at:when})};
+  for(let d=DAYS;d>=1;d-=3){bd(d,'Goat','Local goat',c.int(170,200)/10,c.int(520,600)*100,[['m1',c.int(125,140)/10],['m9',0.6],['m10',c.int(18,24)/10]]);bd(d,'Lamb','Australian lamb',c.int(190,220)/10,c.int(560,640)*100,[['m2',c.int(120,135)/10],['m3',c.int(30,40)/10],['m10',1.5]]);bd(d,'Beef','Beef forequarter',c.int(480,520)/10,c.int(1100,1250)*100,[['m4',c.int(300,340)/10],['m5',c.int(40,55)/10],['m8',c.int(60,80)/10]])}
+  for(const [id,q] of [['m6',25],['m7',60]])c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:q,cost:c.get('grocery_items',id).price*0.7|0,supplier:'Al Rawdah Farms',at:at(DAYS,8)});
+  const kgItems=['m1','m1','m2','m3','m4','m4','m5','m6','m7','m7','m7','m8','m9'],line=()=>{const id=c.pick(kgItems),it=c.get('grocery_items',id),cut=it.cuts?.length&&c.r()<.7?c.pick(it.cuts):null;return{id,qty:c.int(5,30)/10,price:it.price+(cut?.charge||0),...(cut?{options:[cut.id]}:{})}};
+  for(let d=DAYS-1;d>=1;d--){for(let k=0;k<perDay(c,d,6);k++)c.sale(Array.from({length:c.int(1,3)},line),{date:at(d,c.int(8,22),c.int(0,59)),customerId:c.r()<.3?c.pick(cust):''});
+   if(d%2===0)c.sale([{id:'m4',qty:c.int(80,150)/10,price:3200},{id:'m7',qty:c.int(100,200)/10,price:1800}],{date:at(d,9),method:'Credit (account)',customerId:c.pick([hotel,cafe])})}
+  c.put('grocery_payments',uid(),{customerId:hotel,amount:150000,method:'Card (external terminal)',note:'Monthly settlement',at:at(10,11)});
+  const order=(dueDays,hour,{type='pickup',occasion='Regular',who=c.pick(cust),items,advance=0,status='New'}={})=>{const o=c.put('meat_orders',uid(),{status:'New',type,occasion,customerId:who,due:slot(-dueDays,hour),address:type==='delivery'?c.pick(['JLT Cluster D, Tower 2','Al Barsha 1, Villa 14','Rimal Hotel, JBR']):'',items,advance,note:''});if(advance)c.put('grocery_payments',uid(),{customerId:who,amount:advance,method:'Cash',note:'Advance for order',at:at(1,12)});let cur=o;for(const st of {New:[],Preparing:['Preparing'],Ready:['Preparing','Ready']}[status])cur=c.put('meat_orders',o.id,{...cur,status:st});return cur};
+  order(0,17,{type:'delivery',who:hotel,items:[{itemId:'m4',qty:15,cut:'c1'},{itemId:'m7',qty:20,cut:'c9'}],status:'Preparing'});
+  order(0,19,{items:[{itemId:'m1',qty:2,cut:'c2',note:'for biryani'}],status:'Ready'});
+  order(1,10,{occasion:'Eid / Qurbani',items:[{itemId:'w1',qty:1}],advance:30000});
+  order(1,11,{occasion:'Eid / Qurbani',type:'delivery',items:[{itemId:'w1',qty:2},{itemId:'m10',qty:2}],advance:50000});
+  order(2,18,{occasion:'Party / event',items:[{itemId:'m2',qty:8,cut:'c4'},{itemId:'m3',qty:3,cut:'c5'}]});
+ },
 };
 
 // One restaurant order: table/takeaway/delivery, a kitchen ticket and (unless left open) the paid bill.

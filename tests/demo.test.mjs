@@ -15,7 +15,7 @@ test.after(async()=>{await app.close();rmSync(dir,{recursive:true,force:true})})
 test('every business type has a demo that builds with valid sample data',async()=>{
  const done=await resetDemos(app.db);
  assert.deepEqual(Object.values(done).filter(x=>!x),[]);assert.equal(Object.keys(done).length,Object.keys(DEMO_SHOPS).length);
- const list=(await call('demo')).data.shops;assert.equal(list.length,7);
+ const list=(await call('demo')).data.shops;assert.equal(list.length,Object.keys(DEMO_SHOPS).length);
  for(const {type} of list){const n=app.db.prepare("SELECT count(*) n FROM records r JOIN demo_businesses d ON d.business_id=r.business_id WHERE d.type=? AND r.kind='sales'").get(type).n;assert.ok(n>50,type+' has '+n+' sales')}
 });
 
