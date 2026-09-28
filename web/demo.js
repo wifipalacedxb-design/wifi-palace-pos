@@ -14,7 +14,8 @@
    if(saved?.pending?.length&&!saved.user?.demo){throw Error('This device has '+saved.pending.length+' change(s) for your own business that are not uploaded yet. Open WiFi Palace POS, connect to the internet and let it sync, then try the demo — or use another browser.')}
    const r=await fetch('/api/demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,role}),credentials:'same-origin'});const data=await r.json().catch(()=>({}));
    if(!r.ok)throw Error(data.error||'The demo could not be opened. Try again.');
-   location.href='/';
+   try{new BroadcastChannel('wifipos-tab').postMessage('takeover')}catch{} // another open POS tab steps aside so the demo opens here
+   setTimeout(()=>{location.href='/'},300);
   }catch(e){say(e.message,true);button.disabled=false}
  }
  fetch('/api/demo').then(r=>r.json()).then(({shops})=>{
