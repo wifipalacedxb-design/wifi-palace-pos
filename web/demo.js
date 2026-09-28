@@ -7,6 +7,10 @@
  const say=(text,error)=>{const m=$('message');m.hidden=!text;m.textContent=text||'';m.className='notice'+(error?' error':'')};
  // A real account with changes not yet uploaded must never be replaced by a demo on this device.
  function savedCache(){return new Promise(resolve=>{try{const r=indexedDB.open('wifi-palace-pos',1);r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv')}catch{}};r.onerror=()=>resolve(null);r.onsuccess=()=>{try{const q=r.result.transaction('kv').objectStore('kv').get('wifi-palace-cloud-v2');q.onsuccess=()=>{r.result.close();resolve(q.result||null)};q.onerror=()=>{r.result.close();resolve(null)}}catch{r.result.close();resolve(null)}}}catch{resolve(null)}}).then(v=>{if(v)return v;try{const raw=localStorage.getItem('wifi-palace-cloud-v2');return raw?JSON.parse(raw):null}catch{return null}})}
+ // The POS keeps its files for offline use; switch to the newest version first so every demo type is known.
+ async function latestApp(){try{if(!('serviceWorker'in navigator))return;const reg=await navigator.serviceWorker.getRegistration('/');if(!reg)return;await reg.update().catch(()=>{});
+  const w=reg.waiting||await new Promise(res=>{const i=reg.installing;if(!i){res(null);return}i.addEventListener('statechange',()=>{if(i.state==='installed')res(reg.waiting);if(i.state==='redundant')res(null)});setTimeout(()=>res(reg.waiting),8000)});
+  if(!w)return;await new Promise(res=>{navigator.serviceWorker.addEventListener('controllerchange',res,{once:true});w.postMessage('skipWaiting');setTimeout(res,4000)})}catch{}}
  async function open(type,role,button){
   button.disabled=true;say('');
   try{
@@ -15,7 +19,8 @@
    const r=await fetch('/api/demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,role}),credentials:'same-origin'});const data=await r.json().catch(()=>({}));
    if(!r.ok)throw Error(data.error||'The demo could not be opened. Try again.');
    try{new BroadcastChannel('wifipos-tab').postMessage('takeover')}catch{} // another open POS tab steps aside so the demo opens here
-   setTimeout(()=>{location.href='/'},300);
+   await latestApp();
+   location.href='/';
   }catch(e){say(e.message,true);button.disabled=false}
  }
  fetch('/api/demo').then(r=>r.json()).then(({shops})=>{
