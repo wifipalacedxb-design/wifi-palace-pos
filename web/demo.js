@@ -21,5 +21,7 @@
   if(!shops?.length){$('shops').innerHTML='<p>Demo shops are being prepared. Please try again in a minute.</p>';return}
   $('shops').innerHTML=shops.map(s=>`<div class="card"><div class="icon" aria-hidden="true">${ICONS[s.type]||'🏪'}</div><div class="eyebrow">${esc(LABELS[s.type]||s.type).toUpperCase()}</div><h2>${esc(s.name)}</h2><p>${esc(s.blurb)}</p><div class="row"><button class="primary" data-type="${esc(s.type)}" data-role="owner">Open as owner</button><button data-type="${esc(s.type)}" data-role="cashier">As staff</button></div></div>`).join('');
   document.querySelectorAll('button[data-type]').forEach(b=>b.onclick=()=>open(b.dataset.type,b.dataset.role,b));
+  // /demo#salon from the sales page: bring that shop to the top of the list and highlight it.
+  const want=location.hash.slice(1),card=want&&document.querySelector(`button[data-type="${CSS.escape(want)}"]`)?.closest('.card');if(card){card.parentNode.prepend(card);card.style.outline='3px solid #6553bf';card.scrollIntoView({block:'center'})}
  }).catch(()=>{$('shops').innerHTML='<p>Could not load the demo shops. Check your internet connection.</p>'});
 })();
