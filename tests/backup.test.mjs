@@ -19,3 +19,16 @@ test('CLI runs through deployment directory symlink',async t=>{
  assert.equal(status.restoreTest,'passed');
  await verifyBackup(join(f.backups,status.file));
 });
+
+test('tiered retention: 48 hourly, one per day for 30 days, one per week for 12 weeks (UAE time)',async()=>{
+ const {retentionPlan}=await import('../server/backup.mjs');
+ const name=t=>'salon-backup-'+new Date(t).toISOString().replace(/[-:.]/g,'')+'-'+crypto.randomUUID()+'.sqlite';
+ const now=Date.UTC(2026,8,29,20,45),names=[];for(let h=0;h<24*120;h++)names.push(name(now-h*3600000)); // 120 days of hourly backups
+ const {keep,remove}=retentionPlan(names,{hourly:48,daily:30,weekly:12});
+ assert.ok(keep.has(names[0]),'newest kept');for(let i=0;i<48;i++)assert.ok(keep.has(names[i]),'hourly '+i);
+ const days=new Set([...keep].map(n=>n.slice(13,21)));assert.ok(days.size>=30);
+ assert.ok(keep.size>=48+28&&keep.size<=48+30+12,'kept '+keep.size);assert.equal(keep.size+remove.length,names.length);
+ const oldest=Math.min(...[...keep].map(n=>Date.UTC(+n.slice(13,17),+n.slice(17,19)-1,+n.slice(19,21))));assert.ok(now-oldest>=10*7*86400000,'weekly copies reach back about 11-12 weeks (the current week counts as one)');
+ assert.equal(retentionPlan(names,5).keep.size,5); // old number setting still works
+ assert.equal(retentionPlan(['manual.sqlite','salon-backup-bad.sqlite'],{}).keep.size,0); // foreign files are never considered
+});
