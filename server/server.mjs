@@ -9,18 +9,22 @@ import {initProvider,providerRoute,subscriptionAllowed} from './provider.mjs';
 import {initFinance,financeRoute} from './finance.mjs';
 import {initSignup,signupRoute,signupMailer} from './signup.mjs';
 import {initRecovery,recoveryRoute,recoveryMailer} from './recovery.mjs';
+import {initDemo,isDemo,demoRoute,scheduleDemos} from './demo.mjs';
 import {recentState,changesSince,registerTill,offlineHours,HISTORY_DAYS} from './sync.mjs';
 const root=join(dirname(fileURLToPath(import.meta.url)),'..');
-export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080'}={}){
+export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',demo}={}){
  const db=openStore(file),secure=origin.startsWith('https://'),dummy=await passwordHash('dummy-not-a-real-password-123');
  initProvider(db);
  initFinance(db);
  initSignup(db);
  initRecovery(db);
+ initDemo(db);
+ // Demo shops are built on the live (https) server unless DEMO_SHOPS=off; tests turn them on explicitly.
+ const demos=(demo??(origin.startsWith('https://')&&process.env.DEMO_SHOPS!=='off'))?scheduleDemos(db):null;
  if(!secure&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))throw Error('PUBLIC_ORIGIN must use HTTPS except for local development.');
  function send(res,status,data,extra={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra});res.end(JSON.stringify(data))}
  const owner=u=>{if(u.role!=='owner')throw new ApiError(403,'Owner permission required')};
- const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',offlineHours:offlineHours(db,u.business_id),name:u.name,email:u.email,role:u.role});
+ const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',offlineHours:offlineHours(db,u.business_id),...(isDemo(db,u.business_id)?{demo:true}:{}),name:u.name,email:u.email,role:u.role});
  async function body(req){let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>2000000)throw new ApiError(413,'Request exceeds 2 MB');chunks.push(c)}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}')}catch{throw new ApiError(400,'Invalid JSON')}}
  function limited(key,max=10){const now=Date.now(),r=db.prepare('SELECT * FROM login_attempts WHERE key=?').get(key);if(r&&r.until>now&&r.count>=max)throw new ApiError(429,'Too many attempts. Try again in 15 minutes.');db.prepare('INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count,until=excluded.until').run(key,r&&r.until>now?r.count+1:1,r&&r.until>now?r.until:now+900000)}
  const server=createServer(async(req,res)=>{
@@ -28,7 +32,7 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
   try{
    const path=new URL(req.url,'http://local').pathname;
    if(path==='/health'){send(res,200,{ok:true});return}
-   const providerFiles={'/recover':'recovery.html','/recovery.js':'recovery.js','/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
+   const providerFiles={'/demo':'demo.html','/demo.js':'demo.js','/recover':'recovery.html','/recovery.js':'recovery.js','/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
    if(providerFiles[path]&&req.method==='GET'){const data=await readFile(join(root,'web',providerFiles[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(data);return}
    if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/gym.js':'gym.js','/charts.js':'charts.js','/grocery.js':'grocery.js','/petshop.js':'petshop.js','/perfume.js':'perfume.js','/restaurant.js':'restaurant.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg','/apple-touch-icon.png':'apple-touch-icon.png'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.png')?'image/png':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
    if(req.method!=='GET'){
@@ -38,6 +42,7 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
    if(await recoveryRoute({db,req,res,path,body,send,limited,origin,mailer:recoveryMail}))return;
    if(await signupRoute({db,req,res,path,body,send,limited,origin,mailer}))return;
    if(await providerRoute({db,req,res,path,body,send,limited,origin,secure,dummy}))return;
+   if(await demoRoute({db,req,res,path,body,send,limited,secure,publicUser}))return;
    if(path==='/api/login'&&req.method==='POST'){
     const b=await body(req),slug=String(b.salon||'').trim().toLowerCase(),email=String(b.email||'').trim().toLowerCase();if(slug.length>100||email.length>200||typeof b.password!=='string'||b.password.length>128)throw new ApiError(400,'Invalid login');
     const attemptKey=hash(slug+':'+email);limited(attemptKey);limited(hash('ip:'+req.socket.remoteAddress),200);
@@ -53,6 +58,8 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
    if(!u)throw new ApiError(401,'Please sign in again. Pending changes stay on this device.');
    if(!subscriptionAllowed(db,u.business_id))throw new ApiError(403,'Salon subscription expired or suspended. Contact WiFi Palace.');
    if(req.method!=='GET'&&req.headers['x-csrf-token']!==u.csrf)throw new ApiError(403,'Session security check failed. Sign in again.');
+   // Demo shops: visitors share them, so sign-in accounts and passwords stay fixed.
+   if(isDemo(db,u.business_id)&&(path==='/api/password'||path.startsWith('/api/users')&&req.method!=='GET'))throw new ApiError(403,'Not available in the demo shop');
    if(await financeRoute({db,u,req,res,path,body,send}))return;
    if(path==='/api/me'&&req.method==='GET'){send(res,200,{user:publicUser(u),csrf:u.csrf});return}
    if(path==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(hash(token));send(res,200,{ok:true},{'Set-Cookie':`salon_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure?'; Secure':''}`});return}
@@ -79,6 +86,6 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
   }catch(e){if(!res.headersSent)send(res,e.status||500,{error:e.status?e.message:'Server error. Your pending changes have not been removed.'});if(!e.status)console.error(e.message)}
  });
  server.requestTimeout=30000;server.headersTimeout=10000;
- await new Promise(resolve=>server.listen(port,host,resolve));return{server,db,close:()=>new Promise(resolve=>server.close(()=>{db.close();resolve()}))};
+ await new Promise(resolve=>server.listen(port,host,resolve));return{server,db,demos,close:()=>new Promise(resolve=>{demos?.stop();server.close(()=>{db.close();resolve()})})};
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){const app=await start();console.log('WiFi Palace POS listening on port '+app.server.address().port);}

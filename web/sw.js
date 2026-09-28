@@ -1,4 +1,4 @@
-const CACHE='salon-cloud-shell-v3-18-perfume';
+const CACHE='salon-cloud-shell-v3-19-demo';
 const FILES=['/whatsapp.js','/','/index.html','/finance.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 // A new worker waits for all old tabs to close; it never reloads an unpaid bill.
