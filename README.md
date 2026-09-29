@@ -1,4 +1,4 @@
-# WiFi Palace POS
+# Palace POS
 
 Multi-business POS platform (salon, laundry, grocery, restaurant) by WiFi Palace.
 

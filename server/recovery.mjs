@@ -41,11 +41,11 @@ export async function recoveryRoute({db,req,res,path,body,send,limited,origin,ma
  const users=db.prepare('SELECT u.id,u.password,s.name,s.slug FROM users u JOIN businesses s ON s.id=u.business_id WHERE lower(u.email)=? AND u.active=1 ORDER BY s.slug').all(email);
  const accepted=()=>send(res,202,{message:'If the details match an account, check your email and spam folder. If no email arrives, contact WiFi Palace.'});
  if(path.endsWith('/codes')){
-  if(users.length)try{await mailer({email,subject:'Your WiFi Palace POS business codes',text:'Your WiFi Palace POS sign-in codes:\n\n'+users.map(u=>u.name+': '+u.slug).join('\n')+'\n\nSign in: '+origin+'/\nIf you did not request this, ignore this email.'})}catch{console.error('Business code recovery email failed');}
+  if(users.length)try{await mailer({email,subject:'Your Palace POS business codes',text:'Your Palace POS sign-in codes:\n\n'+users.map(u=>u.name+': '+u.slug).join('\n')+'\n\nSign in: '+origin+'/\nIf you did not request this, ignore this email.'})}catch{console.error('Business code recovery email failed');}
  }else{
   const u=users.find(u=>u.slug===code);
   if(u){const token=randomBytes(32).toString('hex');db.prepare('INSERT INTO password_resets VALUES (?,?,?,?)').run(hash(token),u.id,hash(u.password),Date.now()+30*60000);
-   try{await mailer({email,subject:'Reset your WiFi Palace POS password',text:'Reset the password for '+u.name+' (business code: '+u.slug+'):\n\n'+origin+'/recover#'+token+'\n\nThis private link expires in 30 minutes and works once. If you did not request it, ignore this email. Your password has not changed.'})}catch{db.prepare('DELETE FROM password_resets WHERE token=?').run(hash(token));console.error('Password recovery email failed');}
+   try{await mailer({email,subject:'Reset your Palace POS password',text:'Reset the password for '+u.name+' (business code: '+u.slug+'):\n\n'+origin+'/recover#'+token+'\n\nThis private link expires in 30 minutes and works once. If you did not request it, ignore this email. Your password has not changed.'})}catch{db.prepare('DELETE FROM password_resets WHERE token=?').run(hash(token));console.error('Password recovery email failed');}
   }
  }
  accepted();return true;

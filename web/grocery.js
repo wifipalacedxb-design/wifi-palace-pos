@@ -1,4 +1,4 @@
-// Grocery & baqala screens for WiFi Palace POS. Active only when the signed-in business type is "grocery".
+// Grocery & baqala screens for Palace POS. Active only when the signed-in business type is "grocery".
 // Checkout: scan a barcode (USB/Bluetooth scanners type like a keyboard + Enter) or search by name;
 // weighed items ask for kilos. Pay by cash, card or customer credit (khata).
 // Products: price list with live stock, low-stock filter, CSV import/export. Stock: goods in and counts.
@@ -62,7 +62,7 @@
   if(!isGrocery()){prevRender();return}
   if(!cloudReady)return;shim();
   if(!tabs().includes(tab))tab=tabs()[0];
-  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | WiFi Palace POS';(SCREENS[t]||RetailUI.screens[t])();return}
+  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | Palace POS';(SCREENS[t]||RetailUI.screens[t])();return}
   prevRender();paintNav();
  };
  navigate=function(next){

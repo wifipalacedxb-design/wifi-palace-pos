@@ -1,4 +1,4 @@
-// Gym & fitness screens for WiFi Palace POS. Active only when the signed-in business type is "gym".
+// Gym & fitness screens for Palace POS. Active only when the signed-in business type is "gym".
 // Front desk: Check-in (search by name, mobile or member code), Sell (plans, PT packs, products),
 // Members (status, freeze, renew, WhatsApp reminders, member card). Owner: Dashboard, Price list.
 // Shared screens (sales, settings, finance, reports, team, sync, account) come from the core app.
@@ -42,7 +42,7 @@
   if(!isGym()){prevRender();return}
   if(!cloudReady)return;shim();
   if(!tabs().includes(tab))tab=tabs()[0];
-  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | WiFi Palace POS';SCREENS[t]();return}
+  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | Palace POS';SCREENS[t]();return}
   prevRender();paintNav();
  };
  navigate=function(next){

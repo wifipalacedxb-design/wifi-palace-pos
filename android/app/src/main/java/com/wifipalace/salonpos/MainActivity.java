@@ -218,7 +218,7 @@ public class MainActivity extends Activity {
                 if (logo != null && logo.length() <= 1500000 && logo.matches("data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+"))
                     logoTag = "<img style='display:block;margin:0 auto 20px;max-width:170px;max-height:85px' src='" + logo + "'>";
                 String safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-                printWeb.loadDataWithBaseURL(null, "<html><meta charset='utf-8'><body>" + logoTag + "<pre style='white-space:pre-wrap;font:12pt monospace'>" + safe + "</pre><p style='text-align:center;font:9pt sans-serif;color:#777'>Powered by WiFi Palace POS</p></body></html>", "text/html", "UTF-8", null);
+                printWeb.loadDataWithBaseURL(null, "<html><meta charset='utf-8'><body>" + logoTag + "<pre style='white-space:pre-wrap;font:12pt monospace'>" + safe + "</pre><p style='text-align:center;font:9pt sans-serif;color:#777'>Powered by Palace POS</p></body></html>", "text/html", "UTF-8", null);
             });
         }
     }
@@ -286,7 +286,7 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() {
         if (showingOfflinePage) { finish(); return; }
         if (web.canGoBack()) { web.goBack(); return; }
-        new AlertDialog.Builder(this).setTitle("Close WiFi Palace POS?").setMessage("Saved and queued sales stay on this device. An unpaid bill will be cleared.")
+        new AlertDialog.Builder(this).setTitle("Close Palace POS?").setMessage("Saved and queued sales stay on this device. An unpaid bill will be cleared.")
             .setNegativeButton("Stay", null).setPositiveButton("Close", (d,w) -> finish()).show();
     }
 }

@@ -1,4 +1,4 @@
-// Restaurant & café screens for WiFi Palace POS. Active only when the signed-in business type is "restaurant".
+// Restaurant & café screens for Palace POS. Active only when the signed-in business type is "restaurant".
 // Waiters: Tables → order screen → "Send to kitchen" (a KOT record; printed straight to the kitchen/bar
 // printer when this device has one, e.g. the Android or Windows app). Kitchen: live ticket board.
 // Counter: takeaway, delivery and bills (service charge, discount, split equally or by items).
@@ -40,7 +40,7 @@
  function kotText(k,o,route,lines){const l='--------------------------------',t=new Date(k.at);return `${k.type==='void'?'*** VOID ***':route==='bar'?'BAR ORDER':'KITCHEN ORDER'}\n${label(o)||k.table||''}${o?.guests?'  · '+o.guests+' guests':''}\n${k.byName||''}  ${t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}\n${l}\n${lines.map(x=>`${Math.abs(x.qty)} x ${x.name}${(x.options||[]).map(p=>'\n   + '+optLabel(p)).join('')}${x.note?'\n   ! '+x.note:''}`).join('\n')}\n${l}${k.type==='void'?'\nReason: '+k.reason:''}${o?.note?'\nNote: '+o.note:''}`}
  // Prints a KOT on this device's printers; returns true only if every route with items was sent.
  function printKot(k,o){if(!canNetPrint())return false;let all=true;for(const route of ['kitchen','bar']){const lines=k.items.filter(x=>x.route===route);if(!lines.length)continue;const host=routeHost(route);if(!host||!privateIp(host)){all=false;continue}Android.printNetwork('kot-'+k.id+'-'+route,host,80,kotText(k,o,route,lines),'',true)}return all}
- function printersForm(){modal(`<h2>This device · KOT printers</h2><p class="helper">Network (LAN) printers for kitchen order tickets. Works in the WiFi Palace POS Android and Windows apps. Leave empty on phones or iPhones that cannot print; the kitchen screen can print for them.</p><label for="rpK">Kitchen printer IP</label><input id="rpK" inputmode="decimal" placeholder="192.168.1.60" value="${esc(K('wifipos-kitchen'))}"><label for="rpB">Bar printer IP (empty = kitchen printer)</label><input id="rpB" inputmode="decimal" placeholder="192.168.1.61" value="${esc(K('wifipos-bar'))}"><label style="display:flex;gap:10px;align-items:center;margin-top:14px"><input id="rpS" type="checkbox" style="width:auto;margin:0" ${K('wifipos-station-print')?'checked':''}> This is the kitchen screen: print tickets sent from phones that could not print</label><div class="actions"><button type="button" onclick="closeModal()">Cancel</button><button onclick="restTestPrint()">Test print</button><button class="primary" onclick="restSavePrinters()">Save</button></div>`)}
+ function printersForm(){modal(`<h2>This device · KOT printers</h2><p class="helper">Network (LAN) printers for kitchen order tickets. Works in the Palace POS Android and Windows apps. Leave empty on phones or iPhones that cannot print; the kitchen screen can print for them.</p><label for="rpK">Kitchen printer IP</label><input id="rpK" inputmode="decimal" placeholder="192.168.1.60" value="${esc(K('wifipos-kitchen'))}"><label for="rpB">Bar printer IP (empty = kitchen printer)</label><input id="rpB" inputmode="decimal" placeholder="192.168.1.61" value="${esc(K('wifipos-bar'))}"><label style="display:flex;gap:10px;align-items:center;margin-top:14px"><input id="rpS" type="checkbox" style="width:auto;margin:0" ${K('wifipos-station-print')?'checked':''}> This is the kitchen screen: print tickets sent from phones that could not print</label><div class="actions"><button type="button" onclick="closeModal()">Cancel</button><button onclick="restTestPrint()">Test print</button><button class="primary" onclick="restSavePrinters()">Save</button></div>`)}
  function savePrinters(){const k=$('rpK').value.trim(),b=$('rpB').value.trim();for(const h of [k,b])if(h&&!privateIp(h)){alert('Enter printer IPs on your shop network, e.g. 192.168.1.60');return false}setK('wifipos-kitchen',k);setK('wifipos-bar',b);setK('wifipos-station-print',$('rpS').checked?'1':'');closeModal();toast('Printers saved on this device');return true}
 
  // --- navigation -----------------------------------------------------------------------------------------
@@ -52,7 +52,7 @@
   if(tab!=='Order'&&!tabs().includes(tab))tab=tabs()[0];
   if(tab==='Order'&&!orderById(current))tab='Tables';
   kitchenTimer(tab==='Kitchen');
-  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | WiFi Palace POS';SCREENS[t]();return}
+  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | Palace POS';SCREENS[t]();return}
   prevRender();paintNav();
  };
  navigate=function(next){
@@ -224,7 +224,7 @@
   restOrders:v=>{orderView=v;orders()},restRoute:r=>{kitchenRoute=r;setK('wifipos-kds-route',r);kitchen()},
   restKot:(id,to)=>{if(change(()=>{const k=db.restaurant_kots.find(x=>x.id===id);if(!k)throw Error('Ticket not found');k.status=to}))kitchen()},
   restPrinters:printersForm,restSavePrinters:savePrinters,
-  restTestPrint:()=>{if(!savePrinters())return;if(!canNetPrint()){alert('Direct printing works in the WiFi Palace POS Android and Windows apps.');return}for(const r of ['kitchen','bar']){const h=routeHost(r);if(h)Android.printNetwork('test-'+r,h,80,(r==='bar'?'BAR':'KITCHEN')+' PRINTER\nTest ticket\n'+new Date().toLocaleString(),'',true)}},
+  restTestPrint:()=>{if(!savePrinters())return;if(!canNetPrint()){alert('Direct printing works in the Palace POS Android and Windows apps.');return}for(const r of ['kitchen','bar']){const h=routeHost(r);if(h)Android.printNetwork('test-'+r,h,80,(r==='bar'?'BAR':'KITCHEN')+' PRINTER\nTest ticket\n'+new Date().toLocaleString(),'',true)}},
   restItem:itemForm,restTableForm:tableForm,
   restAvail:id=>{if(change(()=>{const i=db.restaurant_items.find(x=>x.id===id);i.available=i.available===false}))menu()},
   restItemDelete:id=>{if(!confirm('Delete this dish? Past bills keep it.'))return;if(change(()=>{db.restaurant_items=db.restaurant_items.filter(x=>x.id!==id)})){closeModal();toast('Dish deleted')}},

@@ -1,4 +1,4 @@
-// Meat shop screens for WiFi Palace POS (business type "meat"). Checkout, products, stock, label scale and
+// Meat shop screens for Palace POS (business type "meat"). Checkout, products, stock, label scale and
 // credit come from grocery.js; this file adds cutting options (chooser at checkout + editor on products),
 // pre-orders (pickup / delivery, Eid & Qurbani, restaurant supply) and carcass breakdown with yield.
 (function(){

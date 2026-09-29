@@ -1,4 +1,4 @@
-// Pet shop screens for WiFi Palace POS (business type "petshop"). Checkout, products, stock and credit come
+// Pet shop screens for Palace POS (business type "petshop"). Checkout, products, stock and credit come
 // from grocery.js; this file adds Pets (profiles + vaccinations), Grooming (appointments per groomer) and
 // Boarding (boarding / daycare stays). "Bill" puts the charge on the checkout for the pet's owner; once paid,
 // the appointment or stay is marked paid.

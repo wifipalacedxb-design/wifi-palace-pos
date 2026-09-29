@@ -1,4 +1,4 @@
-// Arabic / English for WiFi Palace POS.
+// Arabic / English for Palace POS.
 // Screens are written in English; when Arabic is chosen this layer switches the page to right-to-left
 // and replaces known labels, buttons, headings and placeholders. Names, amounts, receipts (<pre>) and
 // anything typed by the user are never changed. The language is a per-device choice.
@@ -27,10 +27,10 @@
   // reports and account recovery
   'Reports':'التقارير','Show report':'عرض التقرير','Bill details':'تفاصيل الفاتورة','Bills':'الفواتير','Items':'العناصر','Net sales before tax':'صافي المبيعات قبل الضريبة','Sales before discount':'المبيعات قبل الخصم','Discounts':'الخصومات','Refunds after discount':'المرتجعات بعد الخصم','Net sales':'صافي المبيعات','From':'من','To':'إلى','Forgot password?':'نسيت كلمة المرور؟','Forgot business code?':'نسيت رمز النشاط؟',
   
-  'WiFi Palace POS':'واي فاي بالاس POS','POINT OF SALE':'نقاط البيع','SALON & SPA':'صالون وسبا','LAUNDRY':'مغسلة','GROCERY & BAQALA':'بقالة','RESTAURANT & CAFÉ':'مطعم ومقهى','GYM & FITNESS':'نادي رياضي',
+  'Palace POS':'بالاس POS','POINT OF SALE':'نقاط البيع','SALON & SPA':'صالون وسبا','LAUNDRY':'مغسلة','GROCERY & BAQALA':'بقالة','RESTAURANT & CAFÉ':'مطعم ومقهى','GYM & FITNESS':'نادي رياضي',
   'Cloud edition':'النسخة السحابية','New order':'طلب جديد','+ New order':'+ طلب جديد','Orders':'الطلبات','Price list':'قائمة الأسعار','Laundry orders':'طلبات الغسيل','New laundry order':'طلب غسيل جديد','Ready for pickup':'جاهز للاستلام','In progress':'قيد التنفيذ','Overdue':'متأخر','Received':'مستلم','Washing':'قيد الغسيل','Ready':'جاهز','Delivered':'تم التسليم','Cancelled':'ملغى','Open':'مفتوحة','Take payment':'استلام الدفع','Hand over':'تسليم','Ticket':'التذكرة','Print ticket':'طباعة التذكرة','Save item':'حفظ الصنف','+ Add item':'+ إضافة صنف','Fresh and ready.':'نظيف وجاهز.','Ready by':'جاهز بتاريخ','Customer name':'اسم العميل','Mobile (for WhatsApp)':'الجوال (لواتساب)','Notes (stains, starch, folding)':'ملاحظات (بقع، نشا، طي)','Save · pay on pickup':'حفظ · الدفع عند الاستلام','Save & take payment':'حفظ واستلام الدفع','Confirm payment':'تأكيد الدفع','Express':'مستعجل','Normal':'عادي','Kilos':'كيلو','All':'الكل','Take payment →':'الدفع ←','pending':'معلّق','Walk-in customer':'عميل بدون حجز','Sync now':'مزامنة الآن','Cloud connected':'متصل بالسحابة','Owner':'المالك','Cashier':'أمين الصندوق','Cancel':'إلغاء','Close':'إغلاق','Edit':'تعديل','Delete':'حذف','Retry':'إعادة المحاولة','Status':'الحالة','Actions':'الإجراءات',
   // login
-  'WIFI PALACE POS':'واي فاي بالاس POS','Your business.':'عملك.','Connected.':'متصل.','One workspace for your team, your customers and every sale.':'مساحة عمل واحدة لفريقك وعملائك وكل عملية بيع.',
+  'PALACE POS · BY WIFI PALACE':'بالاس POS · من واي فاي بالاس','Your business.':'عملك.','Connected.':'متصل.','One workspace for your team, your customers and every sale.':'مساحة عمل واحدة لفريقك وعملائك وكل عملية بيع.',
   'A private workspace for each business':'مساحة عمل خاصة لكل نشاط تجاري','Offline billing with cloud sync':'فوترة دون إنترنت مع مزامنة سحابية','Owner access from anywhere':'وصول المالك من أي مكان',
   'Welcome back':'مرحباً بعودتك','Sign in to your business workspace.':'سجّل الدخول إلى مساحة عملك.','Business code':'رمز النشاط التجاري','Email':'البريد الإلكتروني','Password':'كلمة المرور','Sign in →':'تسجيل الدخول ←','Continue on this device offline':'المتابعة على هذا الجهاز دون إنترنت',
   // dashboard
@@ -40,7 +40,7 @@
   // checkout
   'Let’s make their day.':'لنجعل يومهم مميزاً.','Select services to start a new bill.':'اختر الخدمات لبدء فاتورة جديدة.','Search services…':'ابحث عن الخدمات…','Current bill':'الفاتورة الحالية','Your bill is empty.':'الفاتورة فارغة.','Customer':'العميل','Stylist':'المصفف','Discount (AED)':'الخصم (درهم)','Subtotal':'المجموع الفرعي','Discount':'الخصم','Total':'الإجمالي','Clear bill':'مسح الفاتورة','No matching services.':'لا توجد خدمات مطابقة.',
   'Complete payment':'إتمام الدفع','Total to collect':'المبلغ المطلوب','Payment method':'طريقة الدفع','Cash':'نقداً','Card':'بطاقة','Split':'تقسيم','Cash portion of bill (AED)':'الجزء النقدي (درهم)','Cash received (AED)':'النقد المستلم (درهم)','Confirm & save sale':'تأكيد وحفظ البيع',
-  'Sale receipt':'إيصال البيع','Print / Save PDF':'طباعة / حفظ PDF','Save text':'حفظ كنص','Powered by WiFi Palace POS':'بواسطة واي فاي بالاس POS',
+  'Sale receipt':'إيصال البيع','Print / Save PDF':'طباعة / حفظ PDF','Save text':'حفظ كنص','Powered by Palace POS':'بواسطة بالاس POS',
   // customers & appointments
   'Name':'الاسم','Phone':'الهاتف','Date of birth':'تاريخ الميلاد','Date of birth (optional)':'تاريخ الميلاد (اختياري)','Completed sales':'المبيعات المكتملة','Birthday today':'عيد ميلاد اليوم','Birthday WhatsApp':'تهنئة واتساب','No customers yet. Add your first regular.':'لا يوجد عملاء بعد. أضف أول عميل دائم.','Save customer':'حفظ العميل',
   'When':'الموعد','Service / stylist':'الخدمة / المصفف','WhatsApp':'واتساب','Complete':'إتمام','Book appointment':'حجز موعد','Service':'الخدمة','Date & time':'التاريخ والوقت','Duration (minutes)':'المدة (بالدقائق)','Save booking':'حفظ الحجز',

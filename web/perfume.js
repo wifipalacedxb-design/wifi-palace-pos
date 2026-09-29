@@ -1,4 +1,4 @@
-// Perfume & oud screens for WiFi Palace POS (business type "perfume"). Checkout, products, stock and credit come
+// Perfume & oud screens for Palace POS (business type "perfume"). Checkout, products, stock and credit come
 // from grocery.js; this file adds Blends (custom oil blends per customer), Clients (loyalty points + scent
 // profile), branches (stock per shop / mall kiosk, transfers), gift sets and loyalty settings.
 (function(){

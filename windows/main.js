@@ -1,5 +1,5 @@
 'use strict';
-// WiFi Palace POS for Windows: a secure window around the hosted POS (pos.wifipalace.in) that adds what
+// Palace POS for Windows: a secure window around the hosted POS (pos.wifipalace.in) that adds what
 // a browser cannot do well on a shop counter: direct receipt printing (LAN ESC/POS or a Windows/USB
 // printer without the print dialog), cash-drawer pulse, full-screen counter mode, start with Windows,
 // and offline data kept in the app's own folder instead of the browser profile.
@@ -34,7 +34,7 @@ app.on('second-instance', () => {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1366, height: 860, minWidth: 900, minHeight: 600, show: false, backgroundColor: '#f7f6fa', title: 'WiFi Palace POS',
+    width: 1366, height: 860, minWidth: 900, minHeight: 600, show: false, backgroundColor: '#f7f6fa', title: 'Palace POS',
     icon: path.join(__dirname, 'build', 'icon.png'), fullscreen: !!config.fullscreen,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false, nodeIntegration: false, partition: 'persist:wifipalace-pos', spellcheck: false }
   });
@@ -64,7 +64,7 @@ function buildMenu() {
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }] },
-    { label: 'Help', submenu: [{ label: 'About WiFi Palace POS', click: () => dialog.showMessageBox(alive() ? win : undefined, { type: 'info', title: 'WiFi Palace POS', message: 'WiFi Palace POS for Windows ' + app.getVersion(), detail: 'Software by WiFi Palace\nsales@wifipalace.com\n' + ORIGIN }) }] }
+    { label: 'Help', submenu: [{ label: 'About Palace POS', click: () => dialog.showMessageBox(alive() ? win : undefined, { type: 'info', title: 'Palace POS', message: 'Palace POS for Windows ' + app.getVersion(), detail: 'Software by WiFi Palace\nsales@wifipalace.com\n' + ORIGIN }) }] }
   ]));
 }
 
