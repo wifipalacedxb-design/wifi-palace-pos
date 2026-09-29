@@ -1,5 +1,5 @@
-const CACHE='salon-cloud-shell-v3-27-palace';
-const FILES=['/whatsapp.js','/','/index.html','/finance.js','/accounts.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/meat.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
+const CACHE='salon-cloud-shell-v3-28-billing';
+const FILES=['/whatsapp.js','/','/index.html','/finance.js','/accounts.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/meat.js','/billing.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
 // The page decides when it is safe to switch versions (never during an unpaid bill) and then sends 'skipWaiting'.
 self.addEventListener('message',event=>{if(event.data==='skipWaiting')self.skipWaiting()});
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));

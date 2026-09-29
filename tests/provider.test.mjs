@@ -13,7 +13,7 @@ test('provider isolation, onboarding, invitation replay, expiry and suspension',
  await assert.rejects(()=>bootstrapProvider(app.db,{name:'Other',email:'other@example.test',password:'provider-test-password'}));
  assert.equal((await request('provider/salons')).status,401);
  const admin=await request('provider/login','POST',{email:'admin@example.test',password:'provider-test-password'});assert.equal(admin.status,200);const c=admin.cookie,t=admin.data.csrf;
- const data={name:'Customer One',slug:'customer-one',owner:'Owner',email:'owner@example.test',plan:'Professional',status:'trial',expires:'2099-12-31'};
+ const data={name:'Customer One',slug:'customer-one',owner:'Owner',email:'owner@example.test',plan:'Pro',status:'trial',expires:'2099-12-31'};
  assert.equal((await request('provider/salons','POST',data,c)).status,403);
  assert.equal((await request('provider/salons','POST',data,c,t,'https://evil.test')).status,403);
  assert.equal((await request('provider/salons','POST',{...data,expires:'2099-02-31'},c,t)).status,400);
@@ -28,12 +28,16 @@ test('provider isolation, onboarding, invitation replay, expiry and suspension',
  assert.equal((await request('state','GET',null,c)).status,401);
  assert.equal((await request('provider/salons/'+sid+'/invite','POST',{},c,t)).status,409);
  const list=await request('provider/salons','GET',null,c);assert.equal(list.data[0].ownerActive,1);assert.equal('password' in list.data[0],false);
- assert.equal((await request('provider/salons/'+sid,'PATCH',{plan:'Professional',status:'suspended',expires:'2099-12-31'},c,t)).status,200);
+ assert.equal((await request('provider/salons/'+sid,'PATCH',{plan:'Pro',status:'suspended',expires:'2099-12-31'},c,t)).status,200);
  assert.equal((await request('state','GET',null,salon.cookie)).status,401);
  assert.equal((await request('login','POST',{salon:data.slug,email:data.email,password:'customer-test-password'})).status,401);
- await request('provider/salons/'+sid,'PATCH',{plan:'Professional',status:'active',expires:'2000-01-01'},c,t);
- assert.equal((await request('login','POST',{salon:data.slug,email:data.email,password:'customer-test-password'})).status,403);
- await request('provider/salons/'+sid,'PATCH',{plan:'Professional',status:'active',expires:'2099-12-31'},c,t);
+ await request('provider/salons/'+sid,'PATCH',{plan:'Pro',status:'active',expires:'2000-01-01'},c,t);
+ // Ended subscription: the owner can still sign in, but only to renew; everything else answers 402.
+ const locked=await request('login','POST',{salon:data.slug,email:data.email,password:'customer-test-password'});assert.equal(locked.status,200);assert.equal(locked.data.user.billingLocked,true);
+ assert.equal((await request('state','GET',null,locked.cookie)).status,402);assert.equal((await request('billing/status','GET',null,locked.cookie)).data.locked,true);
+ await request('provider/salons/'+sid,'PATCH',{plan:'Pro',status:'suspended',expires:'2000-01-01'},c,t);
+ assert.equal((await request('login','POST',{salon:data.slug,email:data.email,password:'customer-test-password'})).status,401);
+ await request('provider/salons/'+sid,'PATCH',{plan:'Pro',status:'active',expires:'2099-12-31'},c,t);
  assert.equal((await request('login','POST',{salon:data.slug,email:data.email,password:'customer-test-password'})).status,200);
  assert.ok((await request('provider/audit','GET',null,c)).data.some(x=>x.action==='create-salon'));
  await request('provider/logout','POST',{},c,t);assert.equal((await request('provider/me','GET',null,c)).status,401);

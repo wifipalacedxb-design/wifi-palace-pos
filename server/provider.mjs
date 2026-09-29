@@ -10,14 +10,14 @@ CREATE TABLE IF NOT EXISTS provider_sessions(token TEXT PRIMARY KEY,admin_id TEX
 CREATE TABLE IF NOT EXISTS subscriptions(business_id TEXT PRIMARY KEY REFERENCES businesses(id),plan TEXT NOT NULL,status TEXT NOT NULL,expires TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS invitations(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires INTEGER NOT NULL,used INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS provider_audit(id INTEGER PRIMARY KEY,admin_id TEXT NOT NULL,action TEXT NOT NULL,business_id TEXT,at TEXT NOT NULL);
-`);}
+`);db.exec("UPDATE subscriptions SET plan='Pro' WHERE plan='Professional';UPDATE subscriptions SET plan='Business' WHERE plan='Enterprise'");}
 export function subscriptionAllowed(db,salon){const s=db.prepare('SELECT * FROM subscriptions WHERE business_id=?').get(salon);return !s||(['trial','active'].includes(s.status)&&Date.parse(s.expires)>Date.now());}
 export async function bootstrapProvider(db,{email,name,password}){
  if(!/^\S+@\S+\.\S+$/.test(email||'')||!name?.trim())throw Error('Valid email and name required');const pass=await passwordHash(password);
  db.exec('BEGIN IMMEDIATE');try{if(db.prepare('SELECT 1 FROM provider_admins').get())throw Error('Provider administrator already exists');db.prepare('INSERT INTO provider_admins VALUES (?,?,?,?)').run(id(),email.toLowerCase().trim(),name.trim(),pass);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
 }
 function planFields(b){
- if(!['Starter','Professional','Enterprise'].includes(b.plan)||!['trial','active','suspended'].includes(b.status))throw new ApiError(400,'Choose a valid plan and status');
+ if(!['Starter','Pro','Business'].includes(b.plan)||!['trial','active','suspended'].includes(b.status))throw new ApiError(400,'Choose a valid plan and status');
  if(typeof b.expires!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.expires)||!Number.isFinite(Date.parse(b.expires)))throw new ApiError(400,'Choose an expiry date');
  const expires=b.expires+'T23:59:59.999Z';if(new Date(expires).toISOString()!==expires)throw new ApiError(400,'Invalid expiry date');return {plan:b.plan,status:b.status,expires};
 }

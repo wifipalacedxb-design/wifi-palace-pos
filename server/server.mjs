@@ -9,22 +9,25 @@ import {initProvider,providerRoute,subscriptionAllowed} from './provider.mjs';
 import {initFinance,financeRoute} from './finance.mjs';
 import {initSignup,signupRoute,signupMailer} from './signup.mjs';
 import {initRecovery,recoveryRoute,recoveryMailer} from './recovery.mjs';
+import {initBilling,billingConfig,stripeClient,billingRoute,billingWebhook,billingLocked} from './billing.mjs';
 import {initDemo,isDemo,demoRoute,scheduleDemos} from './demo.mjs';
 import {recentState,changesSince,registerTill,offlineHours,HISTORY_DAYS} from './sync.mjs';
 const root=join(dirname(fileURLToPath(import.meta.url)),'..');
-export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',demo}={}){
+export async function start({billing=null,recoveryMail=recoveryMailer(),mailer=signupMailer(),file=process.env.DATABASE_FILE||join(root,'data','salon.sqlite'),port=Number(process.env.PORT||8080),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',demo}={}){
  const db=openStore(file),secure=origin.startsWith('https://'),dummy=await passwordHash('dummy-not-a-real-password-123');
  initProvider(db);
  initFinance(db);
  initSignup(db);
  initRecovery(db);
  initDemo(db);
+ initBilling(db);
+ const payCfg=billing?.cfg||billingConfig(),stripe=billing?.stripe||(payCfg.key?stripeClient(payCfg.key):null);
  // Demo shops are built on the live (https) server unless DEMO_SHOPS=off; tests turn them on explicitly.
  const demos=(demo??(origin.startsWith('https://')&&process.env.DEMO_SHOPS!=='off'))?scheduleDemos(db):null;
  if(!secure&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))throw Error('PUBLIC_ORIGIN must use HTTPS except for local development.');
  function send(res,status,data,extra={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...extra});res.end(JSON.stringify(data))}
  const owner=u=>{if(u.role!=='owner')throw new ApiError(403,'Owner permission required')};
- const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',offlineHours:offlineHours(db,u.business_id),...(isDemo(db,u.business_id)?{demo:true}:{}),name:u.name,email:u.email,role:u.role});
+ const publicUser=u=>({id:u.id,salonId:u.business_id,businessId:u.business_id,businessType:u.business_type||'salon',offlineHours:offlineHours(db,u.business_id),...(isDemo(db,u.business_id)?{demo:true}:{}),...(billingLocked(db,u.business_id)?{billingLocked:true}:{}),name:u.name,email:u.email,role:u.role});
  async function body(req){let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>2000000)throw new ApiError(413,'Request exceeds 2 MB');chunks.push(c)}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}')}catch{throw new ApiError(400,'Invalid JSON')}}
  function limited(key,max=10){const now=Date.now(),r=db.prepare('SELECT * FROM login_attempts WHERE key=?').get(key);if(r&&r.until>now&&r.count>=max)throw new ApiError(429,'Too many attempts. Try again in 15 minutes.');db.prepare('INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count,until=excluded.until').run(key,r&&r.until>now?r.count+1:1,r&&r.until>now?r.until:now+900000)}
  const server=createServer(async(req,res)=>{
@@ -34,7 +37,8 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
    if(path==='/health'){send(res,200,{ok:true});return}
    const providerFiles={'/pos':'pos.html','/pos.js':'pos.js','/demo':'demo.html','/demo.js':'demo.js','/recover':'recovery.html','/recovery.js':'recovery.js','/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
    if(providerFiles[path]&&req.method==='GET'){const data=await readFile(join(root,'web',providerFiles[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(data);return}
-   if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/accounts.js':'accounts.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/gym.js':'gym.js','/charts.js':'charts.js','/grocery.js':'grocery.js','/petshop.js':'petshop.js','/perfume.js':'perfume.js','/meat.js':'meat.js','/restaurant.js':'restaurant.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg','/apple-touch-icon.png':'apple-touch-icon.png','/favicon.ico':'icon.svg'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.png')?'image/png':path.endsWith('.svg')||path==='/favicon.ico'?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
+   if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/accounts.js':'accounts.js','/billing.js':'billing.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/gym.js':'gym.js','/charts.js':'charts.js','/grocery.js':'grocery.js','/petshop.js':'petshop.js','/perfume.js':'perfume.js','/meat.js':'meat.js','/restaurant.js':'restaurant.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg','/apple-touch-icon.png':'apple-touch-icon.png','/favicon.ico':'icon.svg'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.png')?'image/png':path.endsWith('.svg')||path==='/favicon.ico'?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
+   if(path==='/api/stripe/webhook'&&req.method==='POST'){if(!payCfg.webhookSecret||!stripe)throw new ApiError(404,'Not found');await billingWebhook({db,req,res,send,cfg:payCfg,stripe});return}
    if(req.method!=='GET'){
     if(req.headers.origin&&req.headers.origin!==origin)throw new ApiError(403,'Origin not allowed');
     if(req.headers['content-type']?.split(';')[0]!=='application/json')throw new ApiError(415,'JSON request required');
@@ -48,7 +52,7 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
     const attemptKey=hash(slug+':'+email);limited(attemptKey);limited(hash('ip:'+req.socket.remoteAddress),200);
     const user=db.prepare('SELECT u.*,s.type business_type FROM users u JOIN businesses s ON s.id=u.business_id WHERE s.slug=? AND u.email=? AND u.active=1 AND s.active=1').get(slug,email);
     const ok=await verify(b.password,user?.password||dummy);if(!user||!ok)throw new ApiError(401,'Salon code, email or password is incorrect');
-    if(!subscriptionAllowed(db,user.business_id))throw new ApiError(403,'Salon subscription expired or suspended. Contact WiFi Palace.');
+    if(!subscriptionAllowed(db,user.business_id)&&!(billingLocked(db,user.business_id)&&user.role==='owner'))throw new ApiError(403,billingLocked(db,user.business_id)?'This shop\'s subscription has ended. Ask the owner to sign in and renew; your data is safe.':'Access is suspended. Contact WiFi Palace.');
     db.prepare('DELETE FROM login_attempts WHERE key=? OR until<?').run(attemptKey,Date.now());db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
     const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').run(hash(token),user.id,csrf,Date.now()+12*3600000);audit(db,user,'login','session');
     send(res,200,{user:publicUser(user),csrf},{'Set-Cookie':`salon_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${secure?'; Secure':''}`});return;
@@ -56,10 +60,18 @@ export async function start({recoveryMail=recoveryMailer(),mailer=signupMailer()
    const token=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('salon_session='))?.slice(14)||'';
    const u=db.prepare('SELECT u.*,s.csrf,t.type business_type FROM sessions s JOIN users u ON u.id=s.user_id JOIN businesses t ON t.id=u.business_id WHERE s.token=? AND s.expires>? AND u.active=1 AND t.active=1').get(hash(token),Date.now());
    if(!u)throw new ApiError(401,'Please sign in again. Pending changes stay on this device.');
-   if(!subscriptionAllowed(db,u.business_id))throw new ApiError(403,'Salon subscription expired or suspended. Contact WiFi Palace.');
+   if(!subscriptionAllowed(db,u.business_id)){
+    // Ended trial / unpaid: the owner may only see and pay the subscription. Suspended shops stay blocked.
+    // 402 (not 403) so tills keep unsent sales queued instead of flagging them as rejected.
+    if(!billingLocked(db,u.business_id))throw new ApiError(403,'Access is suspended. Contact WiFi Palace.');
+    if(u.role!=='owner')throw new ApiError(402,'This shop\'s subscription has ended. Ask the owner to renew; your data and unsent sales are safe.');
+    if(!(path==='/api/me'||path==='/api/logout'||path.startsWith('/api/billing/')))throw new ApiError(402,'Your subscription has ended. Choose a plan to continue; your data is safe.');
+   }
    if(req.method!=='GET'&&req.headers['x-csrf-token']!==u.csrf)throw new ApiError(403,'Session security check failed. Sign in again.');
    // Demo shops: visitors share them, so sign-in accounts and passwords stay fixed.
    if(isDemo(db,u.business_id)&&(path==='/api/password'||path.startsWith('/api/users')&&req.method!=='GET'))throw new ApiError(403,'Not available in the demo shop');
+   if(path.startsWith('/api/billing/')&&req.method!=='GET'&&isDemo(db,u.business_id))throw new ApiError(403,'Not available in the demo shop');
+   if(await billingRoute({db,u,req,res,path,body,send,origin,cfg:payCfg,stripe}))return;
    if(await financeRoute({db,u,req,res,path,body,send}))return;
    if(path==='/api/me'&&req.method==='GET'){send(res,200,{user:publicUser(u),csrf:u.csrf});return}
    if(path==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(hash(token));send(res,200,{ok:true},{'Set-Cookie':`salon_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure?'; Secure':''}`});return}

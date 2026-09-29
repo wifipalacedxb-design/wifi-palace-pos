@@ -2,9 +2,10 @@ import {randomBytes} from 'node:crypto';
 import {hash,id,passwordHash,seed} from './store.mjs';
 import {ApiError} from './rules.mjs';
 import {checkBusinessType,BUSINESS_TYPES} from './modules.mjs';
+export const TRIAL_DAYS=(n=>Number.isInteger(n)&&n>0&&n<=90?n:30)(Number(process.env.TRIAL_DAYS||30)); // first month free
 export function signupMailer(env=process.env,request=fetch){
  if(env.SIGNUP_ENABLED!=='true'||!env.RESEND_API_KEY||!env.MAIL_FROM)return null;
- return async({email,url})=>{const response=await request('https://api.resend.com/emails',{method:'POST',signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:env.MAIL_FROM,to:[email],subject:'Verify your WiFi Palace salon trial',text:`Confirm your email and choose a password to start your 14-day salon trial:\n\n${url}\n\nThis link expires in 1 hour. If you did not request this, ignore this email. No account has been activated.`})});if(!response.ok)throw Error('Email delivery failed');};
+ return async({email,url})=>{const response=await request('https://api.resend.com/emails',{method:'POST',signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:env.MAIL_FROM,to:[email],subject:'Verify your Palace POS free trial',text:`Confirm your email and choose a password to start your free month of Palace POS:\n\n${url}\n\nThis link expires in 1 hour. If you did not request this, ignore this email. No account has been activated.`})});if(!response.ok)throw Error('Email delivery failed');};
 }
 export function initSignup(db){db.exec(`
  CREATE TABLE IF NOT EXISTS signup_requests(token TEXT PRIMARY KEY,email TEXT NOT NULL,name TEXT NOT NULL,owner TEXT NOT NULL,phone TEXT NOT NULL,expires INTEGER NOT NULL,type TEXT NOT NULL DEFAULT 'salon');
@@ -15,7 +16,7 @@ const fail=(status,message)=>{throw new ApiError(status,message)};
 const field=(v,max)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail(400,'Please complete all fields with valid details.');return v.trim()};
 export async function signupRoute({db,req,res,path,body,send,limited,origin,mailer}){
  if(!path.startsWith('/api/signup'))return false;
- if(path==='/api/signup/status'&&req.method==='GET'){send(res,200,{enabled:!!mailer,trialDays:14,businessTypes:BUSINESS_TYPES});return true}
+ if(path==='/api/signup/status'&&req.method==='GET'){send(res,200,{enabled:!!mailer,trialDays:TRIAL_DAYS,businessTypes:BUSINESS_TYPES});return true}
  if(!mailer)fail(503,'Online registration is not available yet. Contact WiFi Palace to create your salon.');
  if(req.method!=='POST')fail(404,'Not found');
  limited(hash('signup-ip:'+req.socket.remoteAddress),30);
@@ -44,7 +45,7 @@ export async function signupRoute({db,req,res,path,body,send,limited,origin,mail
    const p=db.prepare('SELECT * FROM signup_requests WHERE token=? AND expires>?').get(token,Date.now());
    if(!p)fail(400,'This link has expired or was already used.');
    if(db.prepare('SELECT 1 FROM signup_trials WHERE email=?').get(p.email)||db.prepare('SELECT 1 FROM users WHERE lower(email)=?').get(p.email))fail(409,'An account already exists. Sign in or contact WiFi Palace.');
-   const salon=id(),user=id(),now=new Date().toISOString(),expires=new Date(Date.now()+14*86400000).toISOString();
+   const salon=id(),user=id(),now=new Date().toISOString(),expires=new Date(Date.now()+TRIAL_DAYS*86400000).toISOString();
    const prefix=p.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)||'salon';
    let slug;do{slug=prefix+'-'+randomBytes(4).toString('hex')}while(db.prepare('SELECT 1 FROM businesses WHERE slug=?').get(slug));
    db.prepare('INSERT INTO businesses(id,name,slug,active,created,type) VALUES (?,?,?,?,?,?)').run(salon,p.name,slug,1,now,p.type);
@@ -52,7 +53,7 @@ export async function signupRoute({db,req,res,path,body,send,limited,origin,mail
    seed(db,salon,p.name,p.type);
    const settings=db.prepare("SELECT data FROM records WHERE business_id=? AND kind='settings'").get(salon);
    db.prepare("UPDATE records SET data=? WHERE business_id=? AND kind='settings'").run(JSON.stringify({...JSON.parse(settings.data),phone:p.phone}),salon);
-   db.prepare('INSERT INTO subscriptions VALUES (?,?,?,?)').run(salon,'Professional','trial',expires);
+   db.prepare('INSERT INTO subscriptions VALUES (?,?,?,?)').run(salon,'Pro','trial',expires);
    db.prepare('INSERT INTO signup_trials VALUES (?,?,?)').run(p.email,salon,now);
    db.prepare('DELETE FROM signup_requests WHERE email=?').run(p.email);
    db.prepare('INSERT INTO provider_audit(admin_id,action,business_id,at) VALUES (?,?,?,?)').run('self-registration','verified-trial-created',salon,now);
