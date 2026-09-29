@@ -197,8 +197,25 @@ async function buildOne(db,type){
  c.put('settings','singleton',{name:shop.name,phone:'+971 4 000 0000',address:'Dubai, United Arab Emirates',trn:'',tax:5,logo:''});
  let cust;try{cust=PEOPLE.map(([name,phone])=>c.put('customers',uid(),{name,phone,dob:''}).id)}catch(e){removeBusiness(db,r.businessId);db.prepare('DELETE FROM demo_businesses WHERE business_id=?').run(r.businessId);throw e}
  try{BUILD[type](c,cust,db,r.businessId)}catch(e){removeBusiness(db,r.businessId);db.prepare('DELETE FROM demo_businesses WHERE business_id=?').run(r.businessId);throw e}
+ try{demoAccounts(db,r.businessId,r.userId)}catch(e){console.error('Demo accounts skipped: '+e.message)}
  db.prepare('DELETE FROM audit WHERE business_id=?').run(r.businessId);
  return r.businessId;
+}
+// A few suppliers, bills, payments and expenses so the Finance → accounts screens have something to show.
+function demoAccounts(db,business,owner){
+ const day=n=>new Date(Date.now()+4*3600000-n*86400000).toISOString().slice(0,10),now=new Date().toISOString();
+ const sup=db.prepare('INSERT INTO suppliers VALUES (?,?,?,?,?,?,?,?)'),bill=db.prepare('INSERT INTO purchase_bills VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)'),pay=db.prepare('INSERT INTO supplier_payments VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)'),exp=db.prepare('INSERT INTO expenses(business_id,id,date,amount,method,category,note,created_by,created_at,vat) VALUES (?,?,?,?,?,?,?,?,?,?)');
+ sup.run(business,'demo-sup-1','Gulf Star Wholesale LLC','100234567800003','+971 4 111 2233','Weekly delivery',now,now);
+ sup.run(business,'demo-sup-2','Marina Tower Landlord','','+971 4 222 3344','Shop rent',now,now);
+ const b=(id,s,no,d,due,cat,net,vat)=>bill.run(business,id,s,no,day(d),due===null?'':day(due),cat,net,vat,net+vat,'',owner,now);
+ b('demo-bill-1','demo-sup-1','GS-2041',20,5,'Stock for resale',240000,12000);
+ b('demo-bill-2','demo-sup-1','GS-2077',6,-24,'Stock for resale',180000,9000);
+ b('demo-bill-3','demo-sup-1','GS-2080',3,-27,'Supplies',12000,600);
+ b('demo-bill-4','demo-sup-2','RENT-'+day(0).slice(0,7),1,null,'Rent',650000,0);
+ pay.run(business,'demo-pay-1','demo-sup-1','demo-bill-1',day(12),150000,'Bank / card','Transfer ref 55821',owner,now);
+ pay.run(business,'demo-pay-2','demo-sup-2','demo-bill-4',day(1),650000,'Bank / card','Cheque 000412',owner,now);
+ exp.run(business,'demo-exp-1',day(4),84000,'Bank / card','Utilities','DEWA bill',owner,now,4000);
+ exp.run(business,'demo-exp-2',day(2),5250,'Cash','Transport & fuel','Delivery fuel',owner,now,250);
 }
 // Deletes a business and everything that belongs to it (every table with business_id / user_id).
 function removeBusiness(db,business){

@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {audit} from './store.mjs';
+import {initAccounts,accountsRoute} from './accounts.mjs';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status})};
 export const businessDay=(date=new Date())=>new Date(new Date(date).getTime()+4*3600000).toISOString().slice(0,10);
 const dateKey=v=>{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||!Number.isFinite(Date.parse(v))||new Date(v).toISOString().slice(0,10)!==v)fail(400,'Choose a valid date');return v};
@@ -9,11 +10,11 @@ const key=v=>{if(typeof v!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(v))fail(400
 export function initFinance(db){db.exec(`
 CREATE TABLE IF NOT EXISTS expenses(business_id TEXT NOT NULL,id TEXT NOT NULL,date TEXT NOT NULL,amount INTEGER NOT NULL,method TEXT NOT NULL,category TEXT NOT NULL,note TEXT NOT NULL,created_by TEXT NOT NULL,created_at TEXT NOT NULL,voided_at TEXT,void_reason TEXT,PRIMARY KEY(business_id,id));
 CREATE TABLE IF NOT EXISTS day_closings(business_id TEXT NOT NULL,date TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(business_id,date));
-`)}
+`);initAccounts(db)}
 export function financeReport(db,salon,date){
  dateKey(date);
  const sales=db.prepare("SELECT data FROM records WHERE business_id=? AND kind='sales' AND data IS NOT NULL ORDER BY id").all(salon).map(r=>JSON.parse(r.data));
- const expenses=db.prepare('SELECT id,date,amount,method,category,note,created_at,voided_at,void_reason FROM expenses WHERE business_id=? AND date=? ORDER BY created_at,id').all(salon,date);
+ const expenses=db.prepare('SELECT id,date,amount,vat,method,category,note,created_at,voided_at,void_reason FROM expenses WHERE business_id=? AND date=? ORDER BY created_at,id').all(salon,date);
  const totals={sales:0,refunds:0,netSalesBeforeTax:0,cashSales:0,cashRefunds:0,cardSales:0,cardRefunds:0,expenses:0,cashExpenses:0,commission:0,legacySales:0,creditSales:0,creditRefunds:0,creditCollectedCash:0,creditCollectedCard:0};
  const commissions=new Map(),events=[];
  for(const s of sales){const sold=businessDay(s.date)===date,refunded=s.status==='Refunded'&&businessDay(s.refundDate)===date;if(!sold&&!refunded)continue;
@@ -60,12 +61,13 @@ export async function financeRoute({db,u,req,res,path,body,send}){
  if((path==='/api/finance/staff'||path==='/api/finance/stylists')&&req.method==='GET'){const q=new URL(req.url,'http://local').searchParams;send(res,200,staffReport(db,u.business_id,q.get('from')||businessDay(),q.get('to')||businessDay()));return true}
  if(path==='/api/finance/report'&&req.method==='GET'){send(res,200,financeReport(db,u.business_id,new URL(req.url,'http://local').searchParams.get('date')||businessDay()));return true}
  if(path==='/api/finance/expenses'&&req.method==='POST'){
-  const b=await body(req),expense={id:key(b.id),date:dateKey(b.date),amount:amount(b.amount),method:b.method,category:text(b.category,60),note:text(b.note)};
+  const b=await body(req),expense={id:key(b.id),date:dateKey(b.date),amount:amount(b.amount),method:b.method,category:text(b.category,60),note:text(b.note),vat:amount(b.vat??0)};
+  if(expense.vat>Math.ceil(expense.amount*5/105)+100)fail(400,'VAT is more than 5% of the amount. Check the figures.');
   if(!['Cash','Bank / card'].includes(expense.method)||expense.amount===0||expense.date>businessDay())fail(400,'Choose a payment method, positive amount and a date no later than today');
   db.exec('BEGIN IMMEDIATE');try{
    const old=db.prepare('SELECT * FROM expenses WHERE business_id=? AND id=?').get(u.business_id,expense.id);
    if(old){if(Object.keys(expense).some(k=>old[k]!==expense[k]))fail(409,'Expense identifier already used');db.exec('COMMIT');send(res,200,{ok:true,id:expense.id});return true}
-   db.prepare('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL)').run(u.business_id,expense.id,expense.date,expense.amount,expense.method,expense.category,expense.note,u.id,new Date().toISOString());audit(db,u,'expense-created',expense.id);db.exec('COMMIT');send(res,201,{ok:true,id:expense.id});return true;
+   db.prepare('INSERT INTO expenses(business_id,id,date,amount,method,category,note,created_by,created_at,voided_at,void_reason,vat) VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL,?)').run(u.business_id,expense.id,expense.date,expense.amount,expense.method,expense.category,expense.note,u.id,new Date().toISOString(),expense.vat);audit(db,u,'expense-created',expense.id);db.exec('COMMIT');send(res,201,{ok:true,id:expense.id});return true;
   }catch(e){db.exec('ROLLBACK');throw e}
  }
  if(path==='/api/finance/void-expense'&&req.method==='POST'){const b=await body(req),id=key(b.id),reason=text(b.reason);db.exec('BEGIN IMMEDIATE');try{const old=db.prepare('SELECT id FROM expenses WHERE business_id=? AND id=?').get(u.business_id,id);if(!old)fail(404,'Expense not found');const result=db.prepare('UPDATE expenses SET voided_at=?,void_reason=? WHERE business_id=? AND id=? AND voided_at IS NULL').run(new Date().toISOString(),reason,u.business_id,id);if(result.changes)audit(db,u,'expense-voided',id+':'+reason);db.exec('COMMIT');send(res,200,{ok:true});return true}catch(e){db.exec('ROLLBACK');throw e}}
@@ -81,5 +83,6 @@ export async function financeRoute({db,u,req,res,path,body,send}){
    db.prepare('INSERT INTO day_closings VALUES (?,?,?)').run(u.business_id,date,JSON.stringify(closing));audit(db,u,'cash-day-closed',date);db.exec('COMMIT');send(res,201,closing);return true;
   }catch(e){db.exec('ROLLBACK');throw e}
  }
+ if(await accountsRoute({db,u,req,res,path,body,send}))return true;
  fail(404,'Finance action not found');
 }
