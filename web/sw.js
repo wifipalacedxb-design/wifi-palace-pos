@@ -1,4 +1,4 @@
-const CACHE='salon-cloud-shell-v3-29-vat-report';
+const CACHE='salon-cloud-shell-v3-30-receipt-message';
 const FILES=['/whatsapp.js','/','/index.html','/finance.js','/accounts.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/meat.js','/billing.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
 // The page decides when it is safe to switch versions (never during an unpaid bill) and then sends 'skipWaiting'.
 self.addEventListener('message',event=>{if(event.data==='skipWaiting')self.skipWaiting()});

@@ -6,7 +6,7 @@ export {ApiError};
 function validate(db,u,kind,key,data,old){
  const salon=u.business_id,mod=businessModule(u.business_type||'salon');
  if(mod.kinds.includes(kind))return mod.validate({db,u,business:salon,kind,key,data,old});
- if(kind==='settings'){if(!Number.isFinite(data.tax)||data.tax<0||data.tax>100)fail('Invalid tax rate');return{name:required(data.name,100),phone:text(data.phone,40),address:text(data.address,500),trn:text(data.trn,40),tax:data.tax,logo:image(data.logo)}}
+ if(kind==='settings'){if(!Number.isFinite(data.tax)||data.tax<0||data.tax>100)fail('Invalid tax rate');return{name:required(data.name,100),phone:text(data.phone,40),address:text(data.address,500),trn:text(data.trn,40),tax:data.tax,logo:image(data.logo),...(data.footer?{footer:text(data.footer,300)}:{})}}
  if(kind==='vendor')return {logo:image(data.logo)};
  if(kind==='staff'){const commissionBps=data.commissionBps??old?.commissionBps??0;if(!Number.isInteger(commissionBps)||commissionBps<0||commissionBps>10000)fail('Commission must be 0–100%');return{id:key,name:required(data.name,100),commissionBps};}
  if(kind==='customers'){
