@@ -80,7 +80,9 @@ await test('VAT return, profit & loss and cash book use worked numbers',async()=
  // Input: bill1 50.00 + bill3 10.00 VAT (bill2 voided; rent no VAT) + expense 5.00 → 65.00 on 1300.00
  assert.equal(v.input.vat,6500);assert.equal(v.input.net,100000+20000+10000);assert.equal(v.input.noVatCosts,300000);
  assert.equal(v.netVat,400-6500);assert.equal(v.refundable,6100);assert.equal(v.payable,0);
- assert.equal(v.boxes.find(b=>b.box==='11').vat,6500);assert.equal(v.trn,'100000000000003');
+ assert.equal(v.boxes.find(b=>b.box==='11').vat,6500);
+ assert.equal(v.outputLines.reduce((n,x)=>n+x.vat,0),v.output.standardVat);assert.equal(v.outputLines.filter(x=>x.vat<0).length,1);assert.match(v.outputLines.find(x=>x.vat<0).number,/^CN/);
+ assert.equal(v.inputLines.reduce((n,x)=>n+x.vat,0),v.input.vat);assert.equal(v.inputLines.find(x=>x.number==='GT-100').trn,'100200300400500');assert.equal(v.trn,'100000000000003');
  const pl=(await req('finance/pnl'+q,'GET',null,sa)).data;
  assert.equal(pl.sales.net,8000);assert.equal(pl.costOfSales,100000);assert.equal(pl.grossProfit,-92000);
  assert.deepEqual(Object.fromEntries(pl.expenses.map(e=>[e.label,e.amount])),{Rent:300000,Supplies:20000,Utilities:10000});

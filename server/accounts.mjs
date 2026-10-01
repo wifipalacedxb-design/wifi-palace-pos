@@ -61,14 +61,20 @@ const inside=(d,from,to)=>{const day=businessDay(d);return day>=from&&day<=to};
 export function vatReturn(db,business,from,to){
  range(from,to);
  const settings=JSON.parse(db.prepare("SELECT data FROM records WHERE business_id=? AND kind='settings' AND id='singleton'").get(business)?.data||'{}');
- const out={standardNet:0,standardVat:0,noVatNet:0,invoices:0,refunds:0,refundNet:0,refundVat:0};
+ const out={standardNet:0,standardVat:0,noVatNet:0,invoices:0,refunds:0,refundNet:0,refundVat:0},outputLines=[],inputLines=[];
  for(const s of allSales(db,business)){
   const net=s.sub-s.off,vat=s.tax||0;
+  if(inside(s.date,from,to))outputLines.push({date:businessDay(s.date),type:s.documentType||'Invoice',number:s.number||'',party:s.customer||'Walk-in customer',net,vat,total:s.total});
+  if(s.status==='Refunded'&&s.refundDate&&inside(s.refundDate,from,to))outputLines.push({date:businessDay(s.refundDate),type:'Refund (credit note)',number:s.creditNote||s.number||'',party:s.customer||'Walk-in customer',net:-net,vat:-vat,total:-s.total});
   if(inside(s.date,from,to)){out.invoices++;if(vat>0){out.standardNet+=net;out.standardVat+=vat}else out.noVatNet+=net}
   if(s.status==='Refunded'&&s.refundDate&&inside(s.refundDate,from,to)){out.refunds++;out.refundNet+=net;out.refundVat+=vat;if(vat>0){out.standardNet-=net;out.standardVat-=vat}else out.noVatNet-=net}
  }
  const bills=billsIn(db,business,from,to),expenses=expensesIn(db,business,from,to);
  const inp={net:0,vat:0,billNet:0,billVat:0,expenseNet:0,expenseVat:0,noVatCosts:0,bills:bills.length,expenses:expenses.length};
+ const names=new Map(suppliersOf(db,business).map(x=>[x.id,x]));
+ for(const b of bills){const sp=names.get(b.supplier_id);inputLines.push({date:b.date,type:'Purchase bill · '+b.category,number:b.number,party:sp?.name||'',trn:sp?.trn||'',net:b.net,vat:b.vat,total:b.total})}
+ for(const e of expenses)inputLines.push({date:e.date,type:'Expense · '+e.category,number:'',party:e.note,trn:'',net:e.amount-(e.vat||0),vat:e.vat||0,total:e.amount});
+ outputLines.sort((a,b)=>a.date.localeCompare(b.date)||String(a.number).localeCompare(String(b.number)));inputLines.sort((a,b)=>a.date.localeCompare(b.date));
  for(const b of bills){if(b.vat>0){inp.billNet+=b.net;inp.billVat+=b.vat}else inp.noVatCosts+=b.net}
  for(const e of expenses){const vat=e.vat||0;if(vat>0){inp.expenseNet+=e.amount-vat;inp.expenseVat+=vat}else inp.noVatCosts+=e.amount}
  inp.net=inp.billNet+inp.expenseNet;inp.vat=inp.billVat+inp.expenseVat;
@@ -86,7 +92,7 @@ export function vatReturn(db,business,from,to){
   {box:'11',label:'Totals (input)',amount:inp.net,vat:inp.vat}
  ];
  const due=out.standardVat-inp.vat;
- return{from,to,trn:settings.trn||'',rate:settings.tax??0,business:settings.name||'',boxes,output:out,input:inp,netVat:due,payable:due>0?due:0,refundable:due<0?-due:0,
+ return{from,to,outputLines,inputLines,trn:settings.trn||'',rate:settings.tax??0,business:settings.name||'',boxes,output:out,input:inp,netVat:due,payable:due>0?due:0,refundable:due<0?-due:0,
   notes:['Check with your accountant before filing on EmaraTax. This summary only covers what was recorded in the POS.',
    ...(out.noVatNet?['Sales without VAT charged ('+(out.noVatNet/100).toFixed(2)+' AED) are not placed in a box: your accountant decides whether they are zero-rated (box 4), exempt (box 5) or outside scope.']:[]),
    ...(inp.noVatCosts?['Costs recorded without VAT ('+(inp.noVatCosts/100).toFixed(2)+' AED) are not claimed. Enter the VAT on a bill or expense only when you hold a valid tax invoice.']:[]),
