@@ -234,7 +234,9 @@ export async function resetDemos(db,types=Object.keys(DEMO_SHOPS)){const done={}
 // Build missing demos at start-up and rebuild all of them once a day at 04:00 UAE time.
 export function scheduleDemos(db){
  let busy=false;const run=async force=>{if(busy)return;busy=true;try{const have=new Map(db.prepare('SELECT type,reset FROM demo_businesses').all().map(r=>[r.type,r.reset]));const stale=Object.keys(DEMO_SHOPS).filter(t=>force||!have.has(t)||uaeDay(Date.parse(have.get(t)))!==uaeDay()&&new Date(Date.now()+4*3600000).getUTCHours()>=4);if(stale.length)await resetDemos(db,stale)}finally{busy=false}};
- setTimeout(()=>run(false).catch(e=>console.error(e.message)),1000);
+ // A restaurant demo built before waiter logins existed gets its sample waiter and PINs now (no need to wait for the nightly rebuild).
+ const addWaiter=async()=>{const d=db.prepare("SELECT business_id,cashier_id FROM demo_businesses WHERE type='restaurant'").get();if(!d||db.prepare('SELECT 1 FROM user_options WHERE business_id=? AND waiter=1').get(d.business_id))return;const w=randomBytes(16).toString('hex');db.prepare('INSERT OR IGNORE INTO users VALUES (?,?,?,?,?,?,1)').run(w,d.business_id,'waiter@restaurant.demo.invalid','Ali (waiter)',await passwordHash(randomBytes(24).toString('hex')),'cashier');const id=db.prepare("SELECT id FROM users WHERE business_id=? AND email='waiter@restaurant.demo.invalid'").get(d.business_id).id;await setStaffOptions(db,d.business_id,id,{waiter:true,pin:'1234'});await setStaffOptions(db,d.business_id,d.cashier_id,{pin:'1234'})};
+ setTimeout(()=>run(false).then(addWaiter).catch(e=>console.error(e.message)),1000);
  const timer=setInterval(()=>run(false).catch(e=>console.error(e.message)),15*60000);timer.unref?.();return{run,stop:()=>clearInterval(timer)};
 }
 
