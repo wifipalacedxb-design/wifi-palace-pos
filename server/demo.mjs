@@ -9,6 +9,7 @@
 import {randomBytes} from 'node:crypto';
 import {createBusiness,passwordHash,hash,audit} from './store.mjs';
 import {operation,ApiError} from './rules.mjs';
+import {setStaffOptions} from './staff.mjs';
 import {BUSINESS_TYPES,businessModule} from './modules.mjs';
 
 const DAY=86400000;
@@ -193,6 +194,8 @@ async function buildOne(db,type){
  const r=await createBusiness(db,{name:shop.name+' (Demo)',slug:shop.slug,owner:'Demo owner',email:'owner@'+type+'.demo.invalid',password,type});
  const cashier=randomBytes(16).toString('hex');db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,1)').run(cashier,r.businessId,'staff@'+type+'.demo.invalid','Demo staff',await passwordHash(password),'cashier');
  db.prepare('INSERT INTO demo_businesses(business_id,type,owner_id,cashier_id,reset) VALUES (?,?,?,?,?)').run(r.businessId,type,r.userId,cashier,new Date().toISOString());
+ if(type==='restaurant'){ // a waiter to try "Switch user": PIN 1234
+  const w=randomBytes(16).toString('hex');db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,1)').run(w,r.businessId,'waiter@restaurant.demo.invalid','Ali (waiter)',await passwordHash(password),'cashier');await setStaffOptions(db,r.businessId,w,{waiter:true,pin:'1234'});await setStaffOptions(db,r.businessId,cashier,{pin:'1234'})}
  const c=ctx(db,r.businessId,type,r.userId,[...type].reduce((n,ch)=>n*31+ch.charCodeAt(0),7));
  c.put('settings','singleton',{name:shop.name,phone:'+971 4 000 0000',address:'Dubai, United Arab Emirates',trn:'',tax:5,logo:''});
  let cust;try{cust=PEOPLE.map(([name,phone])=>c.put('customers',uid(),{name,phone,dob:''}).id)}catch(e){removeBusiness(db,r.businessId);db.prepare('DELETE FROM demo_businesses WHERE business_id=?').run(r.businessId);throw e}

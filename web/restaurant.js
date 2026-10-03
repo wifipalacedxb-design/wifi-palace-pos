@@ -9,14 +9,15 @@
  const OWNER_ONLY=['Dashboard','Menu','Sales','Settings','Finance','Reports','Team'];
  const isRest=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='restaurant';
  const isOwner=()=>cloudUser?.role==='owner';
- const tabs=()=>isOwner()?['Dashboard','Tables','Orders','Kitchen','Menu','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:['Tables','Orders','Kitchen','Customers','My sales','Sync centre','Account'];
+ const isWaiter=()=>!!cloudUser?.waiter; // orders only: no payments, voids or sales figures
+ const tabs=()=>isOwner()?['Dashboard','Tables','Orders','Kitchen','Menu','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:isWaiter()?['Tables','Orders','Sync centre','Account']:['Tables','Orders','Kitchen','Customers','My sales','Sync centre','Account'];
  const localDay=(d=new Date())=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
  const optLabel=o=>typeof o==='string'?o:o.name+(o.price?' +'+(o.price/100).toFixed(2):''); // same wording the server stores on bills
  const sig=(itemId,opts,note)=>itemId+'|'+(opts||[]).map(optLabel).join(',')+'|'+(note||'');
  const mins=t=>Math.max(0,Math.floor((Date.now()-Date.parse(t))/60000));
  const K=key=>{try{return localStorage.getItem(key)||''}catch{return ''}};
  const setK=(key,v)=>{try{v?localStorage.setItem(key,v):localStorage.removeItem(key)}catch{}};
- let current=null,stationBusy=false,drafts={},kitchenRoute=K('wifipos-kds-route')||'kitchen',seenKots=null,kdsTimer=null,orderView='Open';
+ let current=null,stationBusy=false,drafts={},kitchenRoute=K('wifipos-kds-route')||'kitchen',seenKots=null,kdsTimer=null,orderView='Open',liveTimer=null,seenReady=null,readyFor='',lastScreen='';
 
  // --- data helpers ------------------------------------------------------------------------------------
  function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['restaurant_items','restaurant_tables','restaurant_config','restaurant_orders','restaurant_kots'])db[k]??=[]}}
@@ -51,17 +52,31 @@
   if(!cloudReady)return;shim();
   if(tab!=='Order'&&!tabs().includes(tab))tab=tabs()[0];
   if(tab==='Order'&&!orderById(current))tab='Tables';
-  kitchenTimer(tab==='Kitchen');
-  if(OWN.includes(tab)){const t=tab;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | Palace POS';SCREENS[t]();return}
-  prevRender();paintNav();
+  kitchenTimer(tab==='Kitchen');liveSync(['Tables','Orders','Order'].includes(tab));
+  if(OWN.includes(tab)){const t=tab,same=lastScreen===t+':'+(t==='Order'?current:''),y=window.scrollY;tab='Customers';prevRender();tab=t;paintNav();document.title=db.settings.name+' | Palace POS';SCREENS[t]();lastScreen=t+':'+(t==='Order'?current:'');if(same)window.scrollTo(0,y);readyAlerts();return}
+  lastScreen='';prevRender();paintNav();readyAlerts();
  };
  navigate=function(next){
   if(!isRest()){prevNavigate(next);return}
   if(!isOwner()&&OWNER_ONLY.includes(next)){alert('Owner access required');return}
+  if(isWaiter()&&next!=='Order'&&!tabs().includes(next)){alert('Waiter logins can only take orders.');return}
   if(OWN.includes(next)){tab=next;render();return}
   shim();kitchenTimer(false);prevNavigate(next);paintNav();
  };
  // The kitchen screen refreshes every 5 seconds (only the changed records are downloaded).
+ // Waiter and counter screens pull changes every 8 seconds while visible, so table status and "ready" show up quickly.
+ function liveSync(on){if(on&&!liveTimer)liveTimer=setInterval(()=>{if(!isRest()||!cloudReady||!['Tables','Orders','Order'].includes(tab)){liveSync(false);return}if(document.visibilityState==='visible'&&!syncing&&!$('modal').open)syncNow()},8000);if(!on&&liveTimer){clearInterval(liveTimer);liveTimer=null}}
+ // "Food ready" for the person who sent the ticket: sound, vibration and a bar that stays until it is served.
+ function readyAlerts(){
+  const old=$('readyBar');if(!cloudReady||!isRest()||tab==='Kitchen'){old?.remove();return}
+  if(readyFor!==cloudUser.id){readyFor=cloudUser.id;seenReady=null}
+  const mine=db.restaurant_kots.filter(k=>k.status==='ready'&&k.type!=='void'&&k.by===cloudUser.id&&Date.now()-Date.parse(k.at)<6*3600000),ids=new Set(mine.map(k=>k.id));
+  if(seenReady&&mine.some(k=>!seenReady.has(k.id))){beep();try{navigator.vibrate?.([200,100,200])}catch{}const k=mine.find(x=>!seenReady.has(x.id)),o=orderById(k.orderId);toast('Ready: '+(o?label(o):k.table||'#'+k.orderNumber))}
+  seenReady=ids;
+  if(!mine.length){old?.remove();return}
+  const html=`<b>Ready to serve</b>${mine.map(k=>{const o0=orderById(k.orderId),o=o0?.status==='merged'?orderById(o0.mergedInto)||o0:o0;return `<span style="display:inline-flex;gap:8px;align-items:center;background:#fff;border-radius:999px;padding:4px 6px 4px 14px"><span><b>${esc(o?label(o):k.table||'#'+k.orderNumber)}</b> · ${esc(k.items.map(l=>l.qty+'× '+l.name).join(', ').slice(0,60))}</span><button class="primary" style="padding:6px 12px" onclick="restServe('${esc(k.id)}')">Served</button></span>`}).join('')}`;
+  const bar=old||Object.assign(document.createElement('div'),{id:'readyBar'});bar.setAttribute('role','status');bar.style.cssText='position:sticky;top:'+(($('demoBar')?.offsetHeight||0)+6)+'px;z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.12);display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#dff3e9;color:#155e48;border:1px solid #a8dcc4;border-radius:14px;padding:10px 14px;margin:0 0 12px';bar.innerHTML=html;if(!old)$('app').prepend(bar);else if(bar.parentNode!==$('app')||$('app').firstChild!==bar)$('app').prepend(bar);
+ }
  function kitchenTimer(on){if(on&&!kdsTimer)kdsTimer=setInterval(()=>{if(tab!=='Kitchen'){kitchenTimer(false);return}if(!syncing)syncNow().then(()=>{if(tab==='Kitchen'&&!$('modal').open)kitchen()})},5000);if(!on&&kdsTimer){clearInterval(kdsTimer);kdsTimer=null}}
 
  // --- tables ------------------------------------------------------------------------------------------------
@@ -92,12 +107,12 @@
   const o=orderById(current);if(!o){tab='Tables';render();return}
   const items=db.restaurant_items.filter(i=>!i.system&&i.available!==false),cats=[...new Set(items.map(i=>i.category))],lines=orderLines(o),d=draft(),dTotal=d.reduce((n,l)=>n+l.price*l.qty,0),rem=remaining(o),billed=salesOf(o).filter(s=>s.status==='Paid');
   const badge=s=>`<span class="badge" style="${s==='ready'?'background:#dff3e9;color:#155e48':s==='served'?'background:#eceaf3;color:#555':s==='preparing'?'background:#fdf0d8;color:#7a5200':''}">${esc(s==='new'?'Sent':s[0].toUpperCase()+s.slice(1))}</span>`;
-  $('app').innerHTML=`<div class="row"><div><button onclick="navigate('Tables')">← Tables</button> <b style="font-size:22px;margin-left:10px">${esc(label(o))}</b> <span class="helper">${o.guests?o.guests+' guests · ':''}${esc(o.customer||'')}${o.type==='delivery'?' · '+esc(o.address||''):''}</span></div><div class="actions" style="margin:0">${o.type==='dine-in'?`<button onclick="restMove()">Move table</button><button onclick="restMerge()">Merge</button>`:''}${o.type==='delivery'?`<button onclick="restStage()">${o.stage==='out'?'Mark delivered':o.stage==='delivered'?'Delivered ✓':'Out for delivery'}</button>`:''}<button onclick="restNote()">Note</button><button class="danger" onclick="restCancel()">Cancel order</button></div></div>
+  $('app').innerHTML=`<div class="row"><div><button onclick="navigate('Tables')">← Tables</button> <b style="font-size:22px;margin-left:10px">${esc(label(o))}</b> <span class="helper">${o.guests?o.guests+' guests · ':''}${esc(o.customer||'')}${o.type==='delivery'?' · '+esc(o.address||''):''}</span></div><div class="actions" style="margin:0">${o.type==='dine-in'?`<button onclick="restMove()">Move table</button><button onclick="restMerge()">Merge</button>`:''}${o.type==='delivery'?`<button onclick="restStage()">${o.stage==='out'?'Mark delivered':o.stage==='delivered'?'Delivered ✓':'Out for delivery'}</button>`:''}<button onclick="restNote()">Note</button>${isWaiter()?'':'<button class="danger" onclick="restCancel()">Cancel order</button>'}</div></div>
   <div class="layout"><section>${cats.map(c=>`<div class="panel"><h3>${esc(c)}</h3><div class="grid">${items.filter(i=>i.category===c).map(i=>`<button class="service" onclick="restPick('${esc(i.id)}')"><span>${esc(i.route==='bar'?'Bar':i.route==='none'?'No ticket':'Kitchen')}</span><strong>${esc(i.name)}</strong><b>${money(i.price)}</b></button>`).join('')}</div></div>`).join('')||'<div class="panel empty">Add dishes on the Menu first.</div>'}</section>
-  <aside class="panel"><h3>New round</h3>${d.length?d.map((l,k)=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee;gap:6px"><div style="flex:1"><b>${esc(l.name)}</b>${l.options.length?`<div class="helper">${esc(l.options.map(optLabel).join(', '))}</div>`:''}${l.note?`<div class="helper">! ${esc(l.note)}</div>`:''}</div><button aria-label="Less" onclick="restDraftQty(${k},-1)">−</button><b>${l.qty}</b><button aria-label="More" onclick="restDraftQty(${k},1)">+</button></div>`).join('')+`<div class="row"><span>Round</span><b>${money(dTotal)}</b></div><button class="primary" style="width:100%" onclick="restSend()">Send to kitchen</button>`:'<div class="empty">Tap dishes to add them.</div>'}
-  <h3 style="margin-top:20px">On this order</h3>${lines.length?lines.map(l=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee;gap:6px"><div style="flex:1"><b>${l.qty} × ${esc(l.name)}</b>${l.options.length?`<div class="helper">${esc(l.options.map(optLabel).join(', '))}</div>`:''}${l.note?`<div class="helper">! ${esc(l.note)}</div>`:''}</div>${badge(l.status)}<span>${money(l.price*l.qty)}</span><button aria-label="Void" title="Void" onclick="restVoid('${esc(l.sig)}')">×</button></div>`).join(''):'<div class="empty">Nothing sent yet.</div>'}
+  <aside class="panel"><h3>New round</h3>${d.length?d.map((l,k)=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee;gap:6px"><div style="flex:1"><b>${esc(l.name)}</b>${l.options.length?`<div class="helper">${esc(l.options.map(optLabel).join(', '))}</div>`:''}${l.note?`<div class="helper">! ${esc(l.note)}</div>`:''}</div><button aria-label="Less" onclick="restDraftQty(${k},-1)">−</button><b>${l.qty}</b><button aria-label="More" onclick="restDraftQty(${k},1)">+</button></div>`).join('')+`<div class="row"><span>Round</span><b>${money(dTotal)}</b></div><button class="primary" style="width:100%" onclick="restSend()">Send to kitchen</button><button class="primary" id="restSendFloat" onclick="restSend()" style="position:fixed;left:12px;right:12px;bottom:12px;z-index:20;padding:16px;font-size:17px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:${window.innerWidth<900?'block':'none'}">Send to kitchen · ${d.reduce((n,l)=>n+l.qty,0)} item${d.reduce((n,l)=>n+l.qty,0)===1?'':'s'} · ${money(dTotal)}</button>`:'<div class="empty">Tap dishes to add them.</div>'}
+  <h3 style="margin-top:20px">On this order</h3>${lines.length?lines.map(l=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee;gap:6px"><div style="flex:1"><b>${l.qty} × ${esc(l.name)}</b>${l.options.length?`<div class="helper">${esc(l.options.map(optLabel).join(', '))}</div>`:''}${l.note?`<div class="helper">! ${esc(l.note)}</div>`:''}</div>${badge(l.status)}<span>${money(l.price*l.qty)}</span>${isWaiter()?'':`<button aria-label="Void" title="Void" onclick="restVoid('${esc(l.sig)}')">×</button>`}</div>`).join(''):'<div class="empty">Nothing sent yet.</div>'}
   <div class="row total"><b>Order total</b><b>${money(orderTotal(o))}</b></div>${billed.length?`<p class="helper">Billed so far: ${billed.map(s=>esc(s.number)+' '+money(s.total)).join(', ')}</p>`:''}
-  <button class="primary" style="width:100%;margin-top:10px" onclick="restBill()" ${rem.length?'':'disabled'}>Bill ${rem.length?'· '+money(rem.reduce((n,l)=>n+l.price*l.qty,0)):''}</button>${!rem.length&&lines.length?`<button style="width:100%;margin-top:8px" onclick="restClose()">Fully paid · close order</button>`:''}</aside></div>`;
+  ${isWaiter()?'<p class="helper" style="margin-top:10px">To change sent items or take payment, ask the counter.</p>':`<button class="primary" style="width:100%;margin-top:10px" onclick="restBill()" ${rem.length?'':'disabled'}>Bill ${rem.length?'· '+money(rem.reduce((n,l)=>n+l.price*l.qty,0)):''}</button>${!rem.length&&lines.length?`<button style="width:100%;margin-top:8px" onclick="restClose()">Fully paid · close order</button>`:''}`}</aside></div>`;
  }
  function pick(id){const i=db.restaurant_items.find(x=>x.id===id);if(!i)return;
   if(!(i.options||[]).length){const same=draft().find(l=>l.itemId===i.id&&!l.options.length&&!l.note);if(same)same.qty++;else draft().push({key:uid(),itemId:i.id,name:i.name,category:i.category,route:i.route,price:i.price,options:[],note:'',qty:1});orderScreen();return}
@@ -222,6 +237,7 @@
   restClose:()=>{editOrder(x=>{x.status='closed'},'Order closed');tab='Tables';render()},
   restReopen:id=>{current=id;editOrder(x=>{x.status='open'},'Order reopened')},
   restOrders:v=>{orderView=v;orders()},restRoute:r=>{kitchenRoute=r;setK('wifipos-kds-route',r);kitchen()},
+  restServe:id=>{if(change(()=>{const k=db.restaurant_kots.find(x=>x.id===id);if(!k)throw Error('Ticket not found');k.status='served'}))toast('Marked served')},
   restKot:(id,to)=>{if(change(()=>{const k=db.restaurant_kots.find(x=>x.id===id);if(!k)throw Error('Ticket not found');k.status=to}))kitchen()},
   restPrinters:printersForm,restSavePrinters:savePrinters,
   restTestPrint:()=>{if(!savePrinters())return;if(!canNetPrint()){alert('Direct printing works in the Palace POS Android and Windows apps.');return}for(const r of ['kitchen','bar']){const h=routeHost(r);if(h)Android.printNetwork('test-'+r,h,80,(r==='bar'?'BAR':'KITCHEN')+' PRINTER\nTest ticket\n'+new Date().toLocaleString(),'',true)}},
