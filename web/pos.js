@@ -1,5 +1,5 @@
 // Sales page: WhatsApp buttons. Put the sales WhatsApp number here (country code, digits only, e.g. 971501234567).
-const WHATSAPP_NUMBER='';
+const WHATSAPP_NUMBER='971585823467'; // 058 582 3467 (UAE)
 (()=>{'use strict';
  const y=document.getElementById('year');if(y)y.textContent=new Date().getFullYear();
  const n=WHATSAPP_NUMBER.replace(/\D/g,'');
