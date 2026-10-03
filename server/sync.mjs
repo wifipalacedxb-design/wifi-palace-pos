@@ -32,6 +32,7 @@ function when(kind,d){
  if(kind==='meat_breakdowns')return Date.parse(d.at)||0;
  if(kind==='meat_orders')return ['Done','Cancelled'].includes(d.status)?Date.parse(d.history?.at(-1)?.at||d.due)||0:Infinity;
  if(kind==='perfume_points')return Date.parse(d.at)||0;
+ if(kind==='tailor_orders')return ['Delivered','Cancelled'].includes(d.status)?Date.parse(d.history?.at(-1)?.at||d.created)||0:Infinity;
  if(kind==='mobile_repairs')return ['Delivered','Cancelled'].includes(d.status)?Date.parse(d.history?.at(-1)?.at||d.created)||0:Infinity;
  if(kind==='mobile_units')return Infinity; // kept on every device: warranty is checked by IMEI long after the sale
  if(kind==='mobile_buys')return Date.parse(d.at)||0;

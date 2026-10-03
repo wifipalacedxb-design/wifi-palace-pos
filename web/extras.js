@@ -123,7 +123,7 @@ const enterBeforeExtras=enterSalon;
 enterSalon=async function(session){exData={};await enterBeforeExtras(session);if(cloudReady)exLoadTill()};
 // Where the discount goes: salon checkout and the retail checkouts take it directly; others show the amount to type.
 function exBill(){const t=cloudUser.businessType||'salon';
- if(['grocery','petshop','perfume','meat','mobile'].includes(t)&&window.RetailUI?.cartState){const s=RetailUI.cartState();return{customerId:s.customerId||'',sub:s.totals?.sub||0,apply:a=>{RetailUI.setDiscount((s.off||0)+a,s.extra);return true}}}
+ if(['grocery','petshop','perfume','meat','mobile','tailor'].includes(t)&&window.RetailUI?.cartState){const s=RetailUI.cartState();return{customerId:s.customerId||'',sub:s.totals?.sub||0,apply:a=>{RetailUI.setDiscount((s.off||0)+a,s.extra);return true}}}
  if(t==='salon'&&typeof totals==='function'&&typeof cart!=='undefined')return{customerId:typeof customer==='string'?customer:'',sub:totals().sub,apply:a=>{discount=(discount||0)+a;if(tab==='Checkout')render();return true}};
  return{customerId:'',sub:0,apply:()=>false}}
 function exRewards(){const bill=exBill(),L=exTill.rewards.loyalty,custs=(db.customers||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));let pts=null;

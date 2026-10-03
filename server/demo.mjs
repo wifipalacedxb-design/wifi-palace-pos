@@ -22,7 +22,8 @@ export const DEMO_SHOPS={
  petshop:{slug:'demo-petshop',name:'Paws & Claws Pet Shop',blurb:'Pet profiles, grooming, boarding, products & stock'},
  perfume:{slug:'demo-perfume',name:'Oud House Perfumes',blurb:'Oils by tola/ml, custom blends, loyalty points, branches'},
  meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'},
- mobile:{slug:'demo-mobile',name:'Smart Zone Mobiles',blurb:'IMEI tracking, warranty, repair job cards, used phones & trade-in'}
+ mobile:{slug:'demo-mobile',name:'Smart Zone Mobiles',blurb:'IMEI tracking, warranty, repair job cards, used phones & trade-in'},
+ tailor:{slug:'demo-tailor',name:'Noor Abayas & Tailoring',blurb:'Stitching orders, measurements, ready-made abayas, fabric by the metre'}
 };
 const PEOPLE=[['Fatima Al Mansoori','0501234501'],['Ahmed Khan','0551234502'],['Priya Nair','0521234503'],['Omar Haddad','0561234504'],['Sara Ahmed','0501234505'],['John Mathew','0581234506'],['Aisha Rahman','0541234507'],['Mohammed Ali','0501234508'],['Maria Santos','0551234509'],['Rashid Al Suwaidi','0521234510'],['Noura Saeed','0561234511'],['Vikram Patel','0501234512'],['Layla Hassan','0541234513'],['Yusuf Qureshi','0551234514'],['Elena Petrova','0581234515']];
 
@@ -179,6 +180,40 @@ const BUILD={
   job(1,'iPhone 11','Water damage',0,['Diagnosing']);
   job(0,'Samsung S22','Back glass cracked',18000);
  },
+ tailor(c,cust){
+  c.put('staff','t1',{name:'Master Iqbal'});c.put('staff','t2',{name:'Tailor Salma'});c.put('staff','t3',{name:'Tailor Rafiq'});
+  const B={branch:'main'};
+  for(const [id,n] of [['ab1',60],['ab2',95],['ab3',48],['sh1',230],['fb1',520],['fb2',460],['tr1',420]])c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost:c.get('grocery_items',id).price*0.45|0,supplier:'Naif Textiles Trading',invoice:'NT-'+c.int(1000,9999),...B,at:at(DAYS,10)});
+  for(let d=DAYS-1;d>=1;d--){
+   for(let k=0;k<perDay(c,d,3);k++)c.sale([{id:c.pick(['ab1','ab2','ab2','ab3']),qty:1},...(c.r()<.6?[{id:'sh1',qty:c.int(1,2)}]:[])],{date:at(d,c.int(10,22),c.int(0,59)),customerId:c.r()<.5?c.pick(cust):'',extra:B});
+   if(c.r()<.7)c.sale([{id:c.pick(['fb1','fb2']),qty:c.int(4,12)/2},...(c.r()<.4?[{id:'tr1',qty:c.int(2,6)}]:[])],{date:at(d,c.int(10,21),c.int(0,59)),extra:B});
+   if(c.r()<.6)c.sale([{id:'al1',qty:1,price:c.pick([2000,3000,3000,4000,5000])}],{date:at(d,c.int(11,21),c.int(0,59)),method:'Cash',extra:B});
+  }
+  const M={Abaya:[['Length','56'],['Shoulder','15.5'],['Bust','38'],['Hip','42'],['Sleeve length','23'],['Sleeve opening','7']],Kandura:[['Length','58'],['Shoulder','18'],['Chest','42'],['Sleeve length','24'],['Neck','15.5']],'Kaftan / jalabiya':[['Length','57'],['Shoulder','15'],['Bust','40'],['Sleeve length','22']]};
+  const fields=g=>(M[g]||M.Abaya).map(([label,value])=>({label,value}));
+  for(const id of cust.slice(0,6))c.put('tailor_measurements',id,{garments:[{type:'Abaya',fields:fields('Abaya'),note:c.pick(['','Likes loose fit','Prefers long sleeves'])}]});
+  // stitching orders and alterations in every stage; finished ones billed against the advance
+  const tailors=['t1','t2','t3'];let n=0;
+  const order=(dueIn,type,items,{advance=0,stage=0,deliver=false}={})=>{const id=uid(),customerId=cust[n++%cust.length];
+   c.put('tailor_orders',id,{status:'New',type,customerId,items:items.map(([garment,qty,price,design,fabricItemId,fabricQty],k)=>({key:'g'+k,garment,qty,price,design:design||'',measurements:type==='stitching'?fields(garment):[],fabric:fabricItemId?'shop':'customer',...(fabricItemId?{fabricItemId,fabricQty}:{})})),due:addDays(uaeDay(),dueIn),advance,tailorId:c.pick(tailors),rate:type==='stitching'?4000:1000,note:''});
+   if(advance)c.put('grocery_payments',uid(),{customerId,amount:advance,method:'Cash',note:'Advance · '+(type==='stitching'?'stitching order':'alteration'),at:at(Math.max(0,7-dueIn),12)});
+   for(const st of ['Cutting','Stitching','Finishing','Ready'].slice(0,stage))c.put('tailor_orders',id,{status:st});
+   if(deliver){const svc=type==='stitching'?'st1':'al1',lines=items.flatMap(([,qty,price,,f,m])=>[{id:svc,qty,price},...(f?[{id:f,qty:Math.round(m*qty*1000)/1000}]:[])]),s=c.sale(lines,{date:at(Math.max(0,-dueIn),17),method:advance?'Credit (account)':'Cash',customerId,extra:B});
+    if(advance){const due=s.total-advance;if(due>0)c.put('grocery_payments',uid(),{customerId,amount:due,method:'Cash',note:'Balance on collection',at:at(Math.max(0,-dueIn),17)})}
+    c.put('tailor_orders',id,{status:'Delivered',saleId:s.id})}};
+  order(-9,'stitching',[['Abaya',2,15000,'Open front, lace on sleeves','fb1',3.5]],{advance:20000,stage:4,deliver:true});
+  order(-6,'stitching',[['Kaftan / jalabiya',1,18000,'Embroidered neck']],{advance:10000,stage:4,deliver:true});
+  order(-4,'alteration',[['Shorten length',2,3000,'Shorten by 2 inches']],{stage:4,deliver:true});
+  order(-2,'stitching',[['Abaya',1,16000,'Butterfly cut','fb2',3.5]],{advance:10000,stage:4,deliver:true});
+  order(-1,'stitching',[['Abaya',3,15000,'Plain, pockets both sides','fb1',3.5]],{advance:30000,stage:4});
+  order(0,'alteration',[['Take in sides',1,4000,'Take in 1 inch each side']],{stage:4});
+  order(-1,'stitching',[['Kandura',2,12000,'Emirati style, tarboosh']],{advance:10000,stage:2});
+  order(0,'stitching',[['Abaya',1,20000,'Bisht style, crystal work on cuffs','fb1',4]],{advance:15000,stage:3});
+  order(1,'stitching',[['Dress',1,22000,'A-line, lined']],{advance:10000,stage:2});
+  order(2,'stitching',[['Abaya',2,15000,'Closed, zip front','fb2',3.5],['Kaftan / jalabiya',1,18000,'Wide sleeves']],{advance:25000,stage:1});
+  order(3,'alteration',[['Replace zip',1,2500,'Black invisible zip']],{stage:0});
+  order(5,'stitching',[['Abaya',1,17000,'Kimono sleeves, piping in gold','fb1',3.75]],{advance:10000,stage:0});
+ },
 };
 
 // One restaurant order: table/takeaway/delivery, a kitchen ticket and (unless left open) the paid bill.
@@ -208,7 +243,7 @@ export function topUp(db,type){
  const cat=businessModule(type).catalogKind,items=c.list(cat).filter(i=>type==='gym'?i.type==='product':type==='restaurant'?false:!(i.system||i.serial||i.type==='service'&&type!=='salon'&&type!=='petshop'));
  if(type==='restaurant'){for(const t of times.slice(0,3))restaurantRunner(c,cust)(0,c.pick(['dine-in','takeaway']),{opened:new Date(Date.parse(t)-40*60000).toISOString()});return}
  for(const t of times){const lines=[...new Set(Array.from({length:c.int(1,3)},()=>c.pick(items).id))].map(id=>{const it=items.find(x=>x.id===id);return{id,qty:it.unit&&it.unit!=='piece'?(it.unit==='kg'?c.int(5,20)/10:c.int(3,10)):1}});
-  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile'].includes(type)?{branch:'main'}:{}})}
+  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile','tailor'].includes(type)?{branch:'main'}:{}})}
 }
 
 async function buildOne(db,type){
