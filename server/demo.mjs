@@ -21,7 +21,8 @@ export const DEMO_SHOPS={
  restaurant:{slug:'demo-restaurant',name:'Spice Route Restaurant',blurb:'Tables, kitchen tickets, kitchen screen, split bills'},
  petshop:{slug:'demo-petshop',name:'Paws & Claws Pet Shop',blurb:'Pet profiles, grooming, boarding, products & stock'},
  perfume:{slug:'demo-perfume',name:'Oud House Perfumes',blurb:'Oils by tola/ml, custom blends, loyalty points, branches'},
- meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'}
+ meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'},
+ mobile:{slug:'demo-mobile',name:'Smart Zone Mobiles',blurb:'IMEI tracking, warranty, repair job cards, used phones & trade-in'}
 };
 const PEOPLE=[['Fatima Al Mansoori','0501234501'],['Ahmed Khan','0551234502'],['Priya Nair','0521234503'],['Omar Haddad','0561234504'],['Sara Ahmed','0501234505'],['John Mathew','0581234506'],['Aisha Rahman','0541234507'],['Mohammed Ali','0501234508'],['Maria Santos','0551234509'],['Rashid Al Suwaidi','0521234510'],['Noura Saeed','0561234511'],['Vikram Patel','0501234512'],['Layla Hassan','0541234513'],['Yusuf Qureshi','0551234514'],['Elena Petrova','0581234515']];
 
@@ -152,6 +153,32 @@ const BUILD={
   order(1,11,{occasion:'Eid / Qurbani',type:'delivery',items:[{itemId:'w1',qty:2},{itemId:'m10',qty:2}],advance:50000});
   order(2,18,{occasion:'Party / event',items:[{itemId:'m2',qty:8,cut:'c4'},{itemId:'m3',qty:3,cut:'c5'}]});
  },
+ mobile(c,cust){
+  c.put('staff','t1',{name:'Sales Imran'});c.put('staff','t2',{name:'Technician Arif'});
+  const B={branch:'main'},imei=()=>'35'+String(c.int(1000000,9999999))+String(c.int(100000,999999)),units={};
+  for(const [id,n,cost] of [['ph1',10,265000],['ph2',12,118000],['ph3',16,36000]]){c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost,supplier:'Gulf Mobile Distribution',invoice:'GM-'+c.int(1000,9999),...B,at:at(DAYS,9)});units[id]=Array.from({length:n},()=>c.put('mobile_units',uid(),{itemId:id,imei:imei(),status:'in',cost,...B,at:at(DAYS,9)}).id)}
+  for(const [id,n] of [['ac1',260],['ac2',240],['ac3',200],['ac4',240],['ac5',180],['pt1',12],['pt2',16]])c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost:c.get('grocery_items',id).price*0.5|0,supplier:'Deira Accessories Trading',...B,at:at(DAYS,10)});
+  // used phones bought from customers
+  units.us1=[];for(const [d,cond,paid,ask,seller] of [[20,'iPhone 12 64GB black · good',80000,105000,'Ravi Kumar'],[12,'Samsung S21 128GB · screen scratch',55000,75000,'Joseph Mathew'],[4,'iPhone 13 128GB blue · battery 88%',120000,155000,'Hassan Ali']]){const code=imei(),when=at(d,12),b=c.put('mobile_buys',uid(),{seller,phone:'05'+c.int(10000000,99999999),idType:'Emirates ID',idNumber:'784-19'+c.int(80,99)+'-'+c.int(1000000,9999999)+'-'+c.int(1,9),itemId:'us1',imei:code,condition:cond,price:paid,method:'Cash',at:when});units.us1.push({id:c.put('mobile_units',uid(),{itemId:'us1',imei:code,status:'in',cost:paid,source:'used',buyId:b.id,condition:cond,price:ask,...B,at:when}).id,ask});c.put('grocery_stock',uid(),{type:'in',itemId:'us1',qty:1,cost:paid,supplier:seller,...B,at:when})}
+  const acc=['ac1','ac1','ac2','ac2','ac3','ac4','ac4','ac5'],sellPhone=(id,date,customerId,price)=>{const u=id==='us1'?units.us1.shift():units[id].shift();if(!u)return;const unit=typeof u==='object'?u.id:u,s=c.sale([{id,qty:1,price:price??(typeof u==='object'?u.ask:undefined),options:[{id:unit}]},...(c.r()<.7?[{id:c.pick(['ac1','ac2']),qty:1}]:[])],{date,customerId,method:c.pick(['Cash','Card (external terminal)','Card (external terminal)']),extra:B});c.put('mobile_units',unit,{status:'sold',saleId:s.id})};
+  for(let d=DAYS-1;d>=1;d--){
+   for(let k=0;k<perDay(c,d,5);k++)c.sale(Array.from({length:c.int(1,2)},()=>({id:c.pick(acc),qty:c.int(1,2)})),{date:at(d,c.int(10,22),c.int(0,59)),customerId:c.r()<.2?c.pick(cust):'',extra:B});
+   for(let k=0;k<c.int(1,4);k++)c.sale([{id:'sv2',qty:1,price:c.pick([1000,2000,2500,5000,10000])}],{date:at(d,c.int(10,22),c.int(0,59)),method:'Cash',extra:B});
+   if(c.r()<.75)sellPhone(c.pick(['ph1','ph2','ph2','ph3','ph3','ph3']),at(d,c.int(11,21),c.int(0,59)),c.pick(cust));
+   if(d===9||d===2)sellPhone('us1',at(d,18),c.pick(cust));
+  }
+  // an instalment customer: phone on account, part paid
+  const inst=c.put('customers',uid(),{name:'Abdul Rahman (instalments)',phone:'0507654399',dob:''}).id,u=units.ph2.shift();
+  if(u){const s=c.sale([{id:'ph2',qty:1,options:[{id:u}]}],{date:at(8,17),method:'Credit (account)',customerId:inst,extra:B});c.put('mobile_units',u,{status:'sold',saleId:s.id});c.put('grocery_payments',uid(),{customerId:inst,amount:50000,method:'Cash',note:'1st instalment',at:at(8,17)});c.put('grocery_payments',uid(),{customerId:inst,amount:30000,method:'Cash',note:'2nd instalment',at:at(1,16)})}
+  // repairs in every stage
+  const job=(daysAgo,device,fault,est,steps=[],bill)=>{const id=uid();c.put('mobile_repairs',id,{status:'Received',customerId:c.pick(cust),device,imei:c.r()<.6?imei():'',fault,accessories:c.pick(['Case','','SIM tray','Case and charger']),estimate:est,due:addDays(uaeDay(),2-daysAgo),technician:'Technician Arif'});for(const st of steps)c.put('mobile_repairs',id,{status:st,diagnosis:fault+' fixed'});if(bill){const r=c.get('mobile_repairs',id),s=c.sale(bill,{date:at(Math.max(0,daysAgo-1),18),customerId:r.customerId,extra:B});c.put('mobile_repairs',id,{status:'Delivered',saleId:s.id})}};
+  job(6,'iPhone 12','Broken screen',35000,['Repairing','Ready'],[{id:'sv1',qty:1,price:10000},{id:'pt1',qty:1,price:25000}]);
+  job(4,'Samsung A52','Battery drains fast',14000,['Repairing','Ready'],[{id:'sv1',qty:1,price:5000},{id:'pt2',qty:1,price:9000}]);
+  job(2,'iPhone 13 Pro','Not charging',15000,['Diagnosing','Repairing','Ready']);
+  job(1,'Redmi Note 12','Broken screen',22000,['Waiting for parts']);
+  job(1,'iPhone 11','Water damage',0,['Diagnosing']);
+  job(0,'Samsung S22','Back glass cracked',18000);
+ },
 };
 
 // One restaurant order: table/takeaway/delivery, a kitchen ticket and (unless left open) the paid bill.
@@ -178,10 +205,10 @@ export function topUp(db,type){
  if(d.topup===today||minutes<570)return;
  db.prepare('UPDATE demo_businesses SET topup=? WHERE business_id=?').run(today,d.business_id);
  const times=Array.from({length:c.int(4,7)},()=>new Date(Date.now()-c.int(5,minutes-570)*60000).toISOString()).sort();
- const cat=businessModule(type).catalogKind,items=c.list(cat).filter(i=>type==='gym'?i.type==='product':type==='restaurant'?false:!(i.system||i.type==='service'&&type!=='salon'&&type!=='petshop'));
+ const cat=businessModule(type).catalogKind,items=c.list(cat).filter(i=>type==='gym'?i.type==='product':type==='restaurant'?false:!(i.system||i.serial||i.type==='service'&&type!=='salon'&&type!=='petshop'));
  if(type==='restaurant'){for(const t of times.slice(0,3))restaurantRunner(c,cust)(0,c.pick(['dine-in','takeaway']),{opened:new Date(Date.parse(t)-40*60000).toISOString()});return}
  for(const t of times){const lines=[...new Set(Array.from({length:c.int(1,3)},()=>c.pick(items).id))].map(id=>{const it=items.find(x=>x.id===id);return{id,qty:it.unit&&it.unit!=='piece'?(it.unit==='kg'?c.int(5,20)/10:c.int(3,10)):1}});
-  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:type==='perfume'?{branch:'main'}:{}})}
+  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile'].includes(type)?{branch:'main'}:{}})}
 }
 
 async function buildOne(db,type){

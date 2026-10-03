@@ -60,7 +60,7 @@ export const grocery={
 
 // Shared by grocery and pet shop: products (piece/kg, barcode, scale code), services (pet shop: no stock),
 // stock movements, customer credit payments and label-scale settings.
-export function retailValidate({db,business,kind,key,data,old,u},{categories=GROCERY_CATEGORIES,serviceTypes=null,units=['piece','kg'],itemExtra=null,configExtra=null,branches=null}={}){
+export function retailValidate({db,business,kind,key,data,old,u},{categories=GROCERY_CATEGORIES,serviceTypes=null,units=['piece','kg'],itemExtra=null,configExtra=null,branches=null,paymentMethods=[]}={}){
  const branchIds=branches?branches(db,business):[];
  {
   if(kind==='grocery_items'){
@@ -107,7 +107,7 @@ export function retailValidate({db,business,kind,key,data,old,u},{categories=GRO
   if(kind==='grocery_payments'){
    if(old)fail('Payments cannot be changed. Record a correction with the owner.',409);
    const c=get(db,business,'customers',required(data.customerId,100));if(!c)fail('Customer must sync before their payment',409);
-   if(!['Cash','Card (external terminal)'].includes(data.method))fail('Payment method must be cash or card');
+   if(!['Cash','Card (external terminal)',...paymentMethods].includes(data.method))fail('Payment method must be cash or card');
    const value=amount(data.amount);if(!value)fail('Enter the amount received');
    // Pending payments on a device can go slightly past the balance while other devices are offline; the balance just shows as credit in favour.
    return{id:key,customerId:c.id,customer:c.name,amount:value,method:data.method,at:recent(data.at,'payment'),by:u.id,note:text(data.note??'',200),balanceBefore:creditBalance(db,business,c.id)};

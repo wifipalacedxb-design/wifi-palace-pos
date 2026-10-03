@@ -6,14 +6,16 @@
 (function(){
  'use strict';
  const RetailUI=window.RetailUI=window.RetailUI||{screens:{}};RetailUI.ext??={};
- const OWN=['Dashboard','Checkout','Products','Stock','Credit','Pets','Grooming','Boarding','Blends','Clients','Orders','Breakdown'];
+ const OWN=['Dashboard','Checkout','Products','Stock','Credit','Pets','Grooming','Boarding','Blends','Clients','Orders','Breakdown','Repairs','IMEI'];
  const OWNER_ONLY=['Dashboard','Sales','Settings','Finance','Reports','Team'];
  const GROCERY_CATEGORIES=['Fruits & vegetables','Dairy & eggs','Bakery','Meat & fish','Rice, flour & grains','Cooking & spices','Snacks & sweets','Drinks','Frozen','Household & cleaning','Personal care','Baby','Tobacco','Other'];
  const CREDIT='Credit (account)';
  const PET_CATEGORIES=['Dog food','Cat food','Bird & fish food','Treats','Accessories','Toys','Health & hygiene','Litter & cages','Aquarium','Live animals','Grooming','Boarding & daycare','Other'];
  // The pet shop uses these same screens (products, stock, checkout, credit) plus its own Pets, Grooming and Boarding (petshop.js).
  const isPet=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='petshop';
- const isGrocery=()=>typeof cloudUser!=='undefined'&&['grocery','petshop','perfume','meat'].includes(cloudUser?.businessType);
+ const isGrocery=()=>typeof cloudUser!=='undefined'&&['grocery','petshop','perfume','meat','mobile'].includes(cloudUser?.businessType);
+ const isMobile=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='mobile';
+ const MOBILE_CATEGORIES=['Phones','Used phones','Tablets','Smart watches','Accessories','Chargers & cables','Cases & protectors','Audio','Parts','SIM & recharge','Repair services','Other'];
  const isMeat=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='meat';
  const MEAT_CATEGORIES=['Mutton & goat','Lamb','Beef','Veal','Camel','Chicken','Fish & seafood','Minced & marinated','Offal','Whole animals','Frozen','Bones & fat','Delivery & services','Other'];
  const isPerf=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='perfume';
@@ -21,19 +23,19 @@
  const X=()=>RetailUI.ext[cloudUser?.businessType]||{}; // per-type add-ons (petshop.js, perfume.js)
  const dec=u=>!!u&&u!=='piece'; // sold in decimals: kg, ml, g, tola
  const per=u=>dec(u)?' / '+u:'';
- const CATS=()=>isPet()?PET_CATEGORIES:isPerf()?PERFUME_CATEGORIES:isMeat()?MEAT_CATEGORIES:GROCERY_CATEGORIES;
+ const CATS=()=>isMobile()?MOBILE_CATEGORIES:isPet()?PET_CATEGORIES:isPerf()?PERFUME_CATEGORIES:isMeat()?MEAT_CATEGORIES:GROCERY_CATEGORIES;
  const isSvc=i=>i?.type==='service';
  const K=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
  const isOwner=()=>cloudUser?.role==='owner';
  const PET_TABS=['Grooming','Boarding','Pets'];
- const tabs=()=>{const pet=isPet()?PET_TABS:isPerf()?['Blends','Clients']:isMeat()?['Orders','Breakdown']:[];return isOwner()?['Dashboard','Checkout',...pet,'Products','Stock','Credit','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:['Checkout',...pet,'Products','Stock','Credit','Customers','My sales','Sync centre','Account']};
+ const tabs=()=>{const pet=isPet()?PET_TABS:isPerf()?['Blends','Clients']:isMeat()?['Orders','Breakdown']:isMobile()?['Repairs','IMEI']:[];return isOwner()?['Dashboard','Checkout',...pet,'Products','Stock','Credit','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:['Checkout',...pet,'Products','Stock','Credit','Customers','My sales','Sync centre','Account']};
  const localDay=(d=new Date())=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
  const qtyText=(q,unit)=>unit&&unit!=='piece'?(+q.toFixed(3))+' '+unit:String(+q.toFixed(3));
  const line=i=>Math.round(i.price*i.qty);
  let cart=[],cartCustomer='',scanText='',productSearch='',productFilter='All',stockSearch='',creditSearch='';
 
  // --- derived data ---------------------------------------------------------------------------------
- function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['grocery_items','grocery_stock','grocery_payments','grocery_config','pets','appointments','pet_stays','perfume_blends','perfume_profiles','perfume_points'])db[k]??=[]}}
+ function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['grocery_items','grocery_stock','grocery_payments','grocery_config','pets','appointments','pet_stays','perfume_blends','perfume_profiles','perfume_points','mobile_units','mobile_repairs','mobile_buys'])db[k]??=[]}}
  // Stock and credit come from the server's totals across every till (cache.summary), plus this device's
  // own changes that have not synced yet. Without a summary (older server) they are computed locally.
  const pendingOps=()=>(typeof cache!=='undefined'&&cache?.pending)||[];
@@ -117,6 +119,9 @@
  function add(id,q,{price,link,note,cut}={}){const i=db.grocery_items.find(x=>x.id===id);if(!i)return;
   // Meat: choose the cutting option (curry cut, boneless…) first; its charge per kg is added to the price.
   if(X().chooseCut&&i.cuts?.length&&cut===undefined){X().chooseCut(i,c=>add(id,q,{price,link,note,cut:c}));return}
+  // Mobile shop: a phone tracked by IMEI is sold one unit per line; choose which one.
+  if(X().chooseUnit&&i.serial&&cut===undefined){X().chooseUnit(i,u=>add(id,1,{price:price??u.price,link,note,cut:u}));return}
+  if(cut&&typeof cut==='object'){if(cart.some(x=>x.cut===cut.id)){alert(cut.name+' is already on this bill');return}cart.push({id:i.id,name:i.name,unit:i.unit,category:i.category,price:price??i.price,openPrice:i.openPrice===true,qty:1,serial:true,cut:cut.id,cutName:cut.name,...(link?{link}:{}),...(note?{note}:{})});scanText='';checkout(true);return}
   const cutObj=cut?(i.cuts||[]).find(c=>c.id===cut):null;
   if(dec(i.unit)&&q===undefined){const w=prompt(i.unit==='kg'?'Weight of '+i.name+' in kg (e.g. 1.25):':'Quantity of '+i.name+' in '+i.unit+' (e.g. '+(i.unit==='tola'?'0.5':'6')+'):');if(w===null)return;q=Math.round(Number(w)*1000)/1000;if(!(q>0&&q<=(i.unit==='kg'?1000:100000))){alert('Enter a quantity in '+i.unit);return}}
   q=q??1;const cur=cart.find(x=>x.id===id&&!x.link&&!x.note&&(x.cut||'')===(cut||''));if(cur&&!dec(i.unit)&&!link&&!note)cur.qty=Math.min(1000,cur.qty+q);else cart.push({id:i.id,name:i.name,unit:i.unit,category:i.category,price:price??(i.price+(cutObj?.charge||0)),openPrice:i.openPrice===true,qty:q,...(link?{link}:{}),...(note?{note}:{}),...(cutObj?{cut:cutObj.id,cutName:cutObj.name+(cutObj.charge?' +'+(cutObj.charge/100).toFixed(2)+'/kg':'')}:{})});
@@ -134,7 +139,7 @@
   ${results.length?`<div style="margin-top:10px">${results.map(i=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #eee"><span><b>${esc(i.name)}</b> <span class="helper">${isSvc(i)?'Service':esc(i.barcode||'')+' · '+esc(qtyText(levels.get(i.id)||0,i.unit))+' in stock'}</span></span><span>${money(i.price)}${per(i.unit)} <button class="primary" onclick="groceryAdd('${esc(i.id)}')">Add</button></span></div>`).join('')}</div>`:''}</div>
   ${quick.length?`<div class="panel"><h3>${isPet()?'Services & quick items':'Quick items (no barcode)'}</h3><div class="grid">${quick.map(i=>`<button class="service" onclick="groceryAdd('${esc(i.id)}')"><b>${esc(i.name)}</b><span>${money(i.price)}${per(i.unit)}</span></button>`).join('')}</div></div>`:''}</section>
   <aside class="panel"><div class="row"><h3>Bill${branches().length>1?` <button class="helper" style="font-weight:400;padding:2px 8px" title="Change this device's branch" onclick="perfBranchPick()">${esc(branchName())}</button>`:''}</h3>${cart.length?'<button onclick="groceryClear()">Clear</button>':''}</div>
-  ${cart.length?cart.map((i,k)=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #eee;gap:8px"><div style="flex:1"><b>${esc(i.name)}</b>${i.cutName?`<div class="helper">✂ ${esc(i.cutName)}</div>`:''}${i.note?`<div class="helper">${esc(i.note)}</div>`:''}${i.openPrice?`<div class="helper">AED <input aria-label="Price of ${esc(i.name)}" type="number" min="0" step="0.01" value="${(i.price/100).toFixed(2)}" style="width:90px;display:inline-block;margin:0" onchange="groceryPrice(${k},this.value)"></div>`:`<div class="helper">${money(i.price)}${per(i.unit)}</div>`}</div><input aria-label="Quantity of ${esc(i.name)}" type="number" min="${dec(i.unit)?'0.001':'1'}" step="${dec(i.unit)?'0.001':'1'}" value="${i.qty}" style="width:84px" onchange="groceryQty(${k},this.value)"><b style="min-width:86px;text-align:right">${money(line(i))}</b><button aria-label="Remove ${esc(i.name)}" onclick="groceryRemove(${k})">×</button></div>`).join(''):'<div class="empty">Scan the first item.</div>'}
+  ${cart.length?cart.map((i,k)=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #eee;gap:8px"><div style="flex:1"><b>${esc(i.name)}</b>${i.cutName?`<div class="helper">${i.serial?'':'✂ '}${esc(i.cutName)}</div>`:''}${i.note?`<div class="helper">${esc(i.note)}</div>`:''}${i.openPrice?`<div class="helper">AED <input aria-label="Price of ${esc(i.name)}" type="number" min="0" step="0.01" value="${(i.price/100).toFixed(2)}" style="width:90px;display:inline-block;margin:0" onchange="groceryPrice(${k},this.value)"></div>`:`<div class="helper">${money(i.price)}${per(i.unit)}</div>`}</div><input aria-label="Quantity of ${esc(i.name)}" type="number" min="${dec(i.unit)?'0.001':'1'}" step="${dec(i.unit)?'0.001':'1'}" value="${i.qty}" style="width:84px" ${i.serial?'disabled title="One phone per line"':''} onchange="groceryQty(${k},this.value)"><b style="min-width:86px;text-align:right">${money(line(i))}</b><button aria-label="Remove ${esc(i.name)}" onclick="groceryRemove(${k})">×</button></div>`).join(''):'<div class="empty">Scan the first item.</div>'}
   <div class="row" style="margin-top:10px"><span>Subtotal</span><span>${money(t.sub)}</span></div>${t.off?`<div class="row"><span>${esc(cartExtra.offLabel||'Discount')}</span><span>−${money(t.off)}</span></div>`:''}${t.tax?`<div class="row"><span>VAT ${db.settings.tax}%</span><span>${money(t.tax)}</span></div>`:''}<div class="row total"><b>Total</b><b>${money(t.total)}</b></div>
   <label for="gCustomer">Customer (needed for credit)</label><select id="gCustomer" onchange="groceryCustomer(this.value)"><option value="">Walk-in customer</option>${db.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<option value="${esc(x.id)}" ${cartCustomer===x.id?'selected':''}>${esc(x.name)}${x.phone?' · '+esc(x.phone):''}</option>`).join('')}</select>${c?`<p class="helper">Account balance: <b>${money(bal)}</b></p>`:''}${X().checkoutExtra?X().checkoutExtra(c,t):''}
   <div class="actions"><button class="primary" onclick="groceryPay('Cash')" ${cart.length?'':'disabled'}>Cash</button><button onclick="groceryPay('Card (external terminal)')" ${cart.length?'':'disabled'}>Card</button><button onclick="groceryPay('${CREDIT}')" ${cart.length?'':'disabled'}>Credit</button></div></aside></div>`;
@@ -145,7 +150,7 @@
   if(!cart.length)return;const t=totals(),c=db.customers.find(x=>x.id===cartCustomer);
   if(method===CREDIT&&!c){alert('Choose the customer whose account this goes on.');return}
   const finish=received=>{const card=method==='Card (external terminal)',credit=method===CREDIT;
-   const sale={id:uid(),number:'SD-'+new Date().toISOString().replace(/\D/g,'').slice(0,14)+'-'+uid().slice(-3).toUpperCase(),date:new Date().toISOString(),items:cart.map(i=>({id:i.id,name:i.name,category:i.category,unit:i.unit,price:i.price,qty:i.qty,...(i.cut?{options:[{id:i.cut,name:i.cutName}]}:{}),...(i.note?{note:i.note}:{})})),sub:t.sub,off:t.off,...(branch()?{branch:branch()}:{}),tax:t.tax,total:t.total,customer:c?.name||'Walk-in customer',customerId:c?.id||'',staff:cloudUser.name||'Staff',staffId:'',commissionBps:0,method,cashAmount:credit||card?0:t.total,cardAmount:card?t.total:0,cashReceived:credit||card?0:received,received:credit?0:received,change:credit?0:received-t.total,shop:{...db.settings},status:'Paid'};
+   const sale={id:uid(),number:'SD-'+new Date().toISOString().replace(/\D/g,'').slice(0,14)+'-'+uid().slice(-3).toUpperCase(),date:new Date().toISOString(),items:cart.map(i=>{const l={id:i.id,name:i.name,category:i.category,unit:i.unit,price:i.price,qty:i.qty,...(i.cut?{options:[{id:i.cut,name:i.cutName}]}:{}),...(i.note?{note:i.note}:{})};if(X().saleLine)X().saleLine(l,i);return l}),sub:t.sub,off:t.off,...(branch()?{branch:branch()}:{}),tax:t.tax,total:t.total,customer:c?.name||'Walk-in customer',customerId:c?.id||'',staff:cloudUser.name||'Staff',staffId:'',commissionBps:0,method,cashAmount:credit||card?0:t.total,cardAmount:card?t.total:0,cashReceived:credit||card?0:received,received:credit?0:received,change:credit?0:received-t.total,shop:{...db.settings},status:'Paid'};
    const links=cart.filter(i=>i.link).map(i=>i.link),extra=cartExtra;let note='';if(change(()=>{db.sales.push(sale);if(X().onPaid)note=X().onPaid(sale,links,extra)||''})){cart=[];cartOff=0;cartExtra={};cartCustomer='';scanText='';closeModal();render();receipt(sale.id);if(note)toast(note)}};
   if(method==='Cash'){modal(`<h2>Cash · ${money(t.total)}</h2><form id="gCash"><label for="gReceived">Cash received (AED)</label><input id="gReceived" type="number" min="0" step="0.01" value="${(t.total/100).toFixed(2)}"><p id="gChange" class="helper"></p><div class="actions"><button type="button" onclick="closeModal()">Cancel</button><button class="primary">Complete sale</button></div></form>`);
    const show=()=>{const r=cents($('gReceived').value);$('gChange').textContent=Number.isSafeInteger(r)&&r>=t.total?'Change: '+money(r-t.total):'Cash received must cover the total'};$('gReceived').oninput=show;show();$('gReceived').select();
@@ -210,6 +215,7 @@
  function stockIn(id=''){
   modal(`<h2>Goods in</h2><form id="gIn">${pick(id)}<div class="business-grid"><div><label for="gsQty">Quantity received</label><input id="gsQty" type="number" min="0" step="0.001" required></div><div><label for="gsCost">Cost per unit (AED, optional)</label><input id="gsCost" type="number" min="0" step="0.01"></div></div><div class="business-grid"><div><label for="gsSupplier">Supplier</label><input id="gsSupplier" maxlength="100"></div><div><label for="gsInv">Supplier invoice no.</label><input id="gsInv" maxlength="60"></div></div><div class="actions"><button type="button" onclick="closeModal()">Cancel</button><button class="primary">Add to stock</button></div></form>`);
   $('gIn').onsubmit=e=>{e.preventDefault();const item=db.grocery_items.find(x=>x.id===$('gsItem').value),q=Number($('gsQty').value),qty=dec(item?.unit)?Math.round(q*1000)/1000:Math.round(q);if(!item||!(qty>0)){alert('Enter the quantity received in '+(dec(item?.unit)?item.unit:'pieces'));return}
+   if(item.serial){alert(item.name+' is tracked by IMEI. Use “Receive phones” so each IMEI is recorded.');return}
    const cost=$('gsCost').value?cents($('gsCost').value):0;if(!Number.isSafeInteger(cost)||cost<0){alert('Check the cost');return}
    if(change(()=>db.grocery_stock.push({id:uid(),type:'in',itemId:item.id,item:item.name,unit:item.unit,qty,cost,...(branch()?{branch:branch()}:{}),supplier:$('gsSupplier').value.trim(),invoice:$('gsInv').value.trim(),note:'',at:new Date().toISOString()}))){closeModal();toast('+'+qtyText(qty,item.unit)+' '+item.name)}};
  }
@@ -217,7 +223,7 @@
  async function receiveInvoice(){
   if(!isOwner()){alert('Only the owner can record supplier invoices. Use Goods in for a delivery.');return}
   let pay;try{pay=await api('finance/payables')}catch(e){alert(e.status?e.message:'Recording a supplier invoice needs the internet. Use Goods in for now and add the bill later.');return}
-  const lines=[],rate=Number(db.settings.tax)||5,items=db.grocery_items.filter(i=>!isSvc(i)).slice().sort((a,b)=>a.name.localeCompare(b.name)),today=localDay();
+  const lines=[],rate=Number(db.settings.tax)||5,items=db.grocery_items.filter(i=>!isSvc(i)&&!i.serial).slice().sort((a,b)=>a.name.localeCompare(b.name)),today=localDay();
   modal(`<h2>Supplier invoice</h2><p class="helper">Adds the items to stock, updates their cost, and records the bill with VAT in Finance.</p><form id="gRec"><div class="business-grid"><div><label for="grSup">Supplier</label><select id="grSup">${pay.suppliers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}<option value="">+ New supplier…</option></select></div><div><label for="grNo">Supplier invoice no.</label><input id="grNo" maxlength="60" required></div></div><div id="grNew" class="business-grid" style="display:${pay.suppliers.length?'none':'grid'}"><div><label for="grName">New supplier name</label><input id="grName" maxlength="100"></div><div><label for="grTrn">Supplier TRN (15 digits, if any)</label><input id="grTrn" inputmode="numeric" maxlength="20"></div></div><label for="grDate">Invoice date</label><input id="grDate" type="date" value="${today}" max="${today}" required style="max-width:220px">
    <h3 style="margin-top:16px">Items on the invoice</h3><div class="business-grid"><div><label for="grItem">Product (or scan its barcode)</label><input id="grScan" placeholder="Scan / type barcode + Enter" autocomplete="off"><select id="grItem" style="margin-top:6px">${items.map(i=>`<option value="${esc(i.id)}">${esc(i.name)}${i.barcode?' · '+esc(i.barcode):''}</option>`).join('')}</select></div><div><label for="grQty">Quantity</label><input id="grQty" type="number" min="0" step="0.001"><label for="grCost">Cost per unit before VAT (AED)</label><input id="grCost" type="number" min="0" step="0.01"></div></div><button type="button" id="grAdd">+ Add item</button><div id="grLines" class="scroll" style="margin-top:10px"></div>
    <div class="business-grid"><div><label for="grVat">VAT on the invoice (AED)</label><input id="grVat" type="number" min="0" step="0.01" value="0"><div class="actions" style="margin:6px 0 0"><button type="button" id="grVatAuto">Add ${rate}% VAT</button><button type="button" id="grVatNone">No VAT</button></div></div><div><label for="grPaid">Paid?</label><select id="grPaid"><option value="">Not yet (on credit)</option><option>Cash</option><option>Bank / card</option></select><p class="helper" id="grTotal"></p></div></div>
@@ -287,7 +293,7 @@
  const SCREENS={'Dashboard':dashboard,'Checkout':()=>checkout(true),'Products':products,'Stock':stock,'Credit':credit};
  Object.assign(window,{
   groceryAdd:id=>add(id),groceryRemove:k=>{cart.splice(k,1);checkout(true)},groceryClear:()=>{if(confirm('Clear this bill?')){cart=[];cartCustomer='';cartOff=0;cartExtra={};checkout(true)}},
-  groceryQty:(k,v)=>{const i=cart[k];if(!i)return;const n=dec(i.unit)?Math.round(Number(v)*1000)/1000:Math.round(Number(v)),max=dec(i.unit)&&i.unit!=='kg'?100000:1000;if(n>0&&n<=max)i.qty=n;else alert('Enter a quantity from '+(dec(i.unit)?'0.001 '+i.unit:'1')+' to '+max);setTimeout(()=>checkout(true))},
+  groceryQty:(k,v)=>{const i=cart[k];if(!i||i.serial)return;const n=dec(i.unit)?Math.round(Number(v)*1000)/1000:Math.round(Number(v)),max=dec(i.unit)&&i.unit!=='kg'?100000:1000;if(n>0&&n<=max)i.qty=n;else alert('Enter a quantity from '+(dec(i.unit)?'0.001 '+i.unit:'1')+' to '+max);setTimeout(()=>checkout(true))},
   groceryCustomer:id=>{cartCustomer=id;cartOff=0;cartExtra={};checkout(true)},groceryPay:pay,groceryServiceForm:serviceForm,
   groceryPrice:(k,v)=>{const i=cart[k];if(!i)return;const c=cents(v);if(Number.isSafeInteger(c)&&c>=0&&c<=10000000)i.price=c;else alert('Enter a price in AED');setTimeout(()=>checkout(true))},
   groceryProducts:f=>{productFilter=f;tab='Products';render()},
@@ -299,7 +305,7 @@
   groceryCreditSearch:v=>{creditSearch=v;credit();const el=$('gcSearch');el.focus();el.setSelectionRange(v.length,v.length)}
  });
  // Used by petshop.js: put a grooming or boarding charge on the bill for that pet's owner and open checkout.
- Object.assign(RetailUI,{isPet,isPerf,isMeat,add:(id,q,o)=>add(id,q,o),isSvc,dec,stockLevels,qtyText,localDay,branches,branch,branchName,balanceOf,
+ Object.assign(RetailUI,{isPet,isPerf,isMeat,isMobile,add:(id,q,o)=>add(id,q,o),isSvc,dec,stockLevels,qtyText,localDay,branches,branch,branchName,balanceOf,
   cartState:()=>({customerId:cartCustomer,off:cartOff,extra:cartExtra,totals:totals(),lines:cart}),setDiscount:(off,extra)=>{cartOff=Math.max(0,Math.round(off||0));cartExtra=extra||{};checkout(true)},refresh:()=>checkout(true),
   bill:({lines,customerId})=>{for(const l of lines)add(l.id,l.qty,{price:l.price,link:l.link,note:l.note,cut:l.cut??(X().chooseCut?'':undefined)});if(customerId)cartCustomer=customerId;tab='Checkout';render()},
   billed:link=>cart.some(i=>i.link&&i.link.kind===link.kind&&i.link.id===link.id)});

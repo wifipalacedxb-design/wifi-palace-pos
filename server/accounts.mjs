@@ -111,6 +111,7 @@ export function profitLoss(db,business,from,to){
  sales.net=sales.gross-sales.discounts-sales.refunds;
  const lines=new Map(),add=(group,label,v)=>{const k=group+'|'+label;const r=lines.get(k)||{group,label,amount:0};r.amount+=v;lines.set(k,r)};
  let costOfSales=0,assets=0;
+ for(const r of db.prepare("SELECT data FROM records WHERE business_id=? AND kind='mobile_buys' AND data IS NOT NULL").all(business)){const x=JSON.parse(r.data);if(inside(x.at,from,to))costOfSales+=x.price} // used phones bought from customers
  for(const b of billsIn(db,business,from,to)){if(b.category===COST_OF_SALES){costOfSales+=b.net;continue}if(b.category===ASSET){assets+=b.net;continue}add('Expenses',b.category,b.net)}
  for(const e of expensesIn(db,business,from,to))add('Expenses',e.category,e.amount-(e.vat||0));
  if(sales.commission)add('Expenses','Staff commissions (earned)',sales.commission);
@@ -133,12 +134,13 @@ export function cashBook(db,business,from,to){
   if(s.status==='Refunded'&&s.refundDate){const r=businessDay(s.refundDate);day(r,'Cash','Refunds',-cash);day(r,'Bank','Card refunds',-card)}
  }
  for(const [k,v] of daily){const [date,book,type]=k.split('|');push(date,book,type,'','Daily total',v)}
- for(const r of db.prepare("SELECT data FROM records WHERE business_id=? AND kind='grocery_payments' AND data IS NOT NULL").all(business)){const p=JSON.parse(r.data);push(businessDay(p.at),p.method==='Cash'?'Cash':'Bank','Account payment','',p.customer,p.amount)}
+ for(const r of db.prepare("SELECT data FROM records WHERE business_id=? AND kind='grocery_payments' AND data IS NOT NULL").all(business)){const p=JSON.parse(r.data);if(p.method==='Trade-in')continue;push(businessDay(p.at),p.method==='Cash'?'Cash':'Bank','Account payment','',p.customer,p.amount)}
+ for(const r of db.prepare("SELECT data FROM records WHERE business_id=? AND kind='mobile_buys' AND data IS NOT NULL").all(business)){const x=JSON.parse(r.data);if(x.method!=='Trade-in')push(businessDay(x.at),x.method==='Cash'?'Cash':'Bank','Used phone bought','',x.item+' · '+x.seller,-x.price)}
  for(const e of db.prepare('SELECT date,amount,method,category,note FROM expenses WHERE business_id=? AND voided_at IS NULL').all(business))push(e.date,e.method==='Cash'?'Cash':'Bank','Expense','',e.category+' · '+e.note,-e.amount);
  const names=new Map(suppliersOf(db,business).map(s=>[s.id,s.name]));
  for(const p of paymentsOf(db,business))if(!p.voided_at)push(p.date,p.method==='Cash'?'Cash':'Bank','Supplier payment','',(names.get(p.supplier_id)||'Supplier')+(p.note?' · '+p.note:''),-p.amount);
  for(const c of db.prepare('SELECT data FROM day_closings WHERE business_id=?').all(business).map(r=>JSON.parse(r.data))){push(c.date,'Cash','Other cash in','',c.note||'Daily closing',c.cashIn);push(c.date,'Cash','Other cash out','',c.note||'Daily closing',-c.cashOut)}
- const order={'Sales':0,'Card sales':0,'Account payment':1,'Refunds':2,'Card refunds':2,'Expense':3,'Supplier payment':4,'Other cash in':5,'Other cash out':6};
+ const order={'Used phone bought':4,'Sales':0,'Card sales':0,'Account payment':1,'Refunds':2,'Card refunds':2,'Expense':3,'Supplier payment':4,'Other cash in':5,'Other cash out':6};
  moves.sort((a,b)=>a.date.localeCompare(b.date)||order[a.type]-order[b.type]||a.detail.localeCompare(b.detail));
  const books={};
  for(const name of ['Cash','Bank']){

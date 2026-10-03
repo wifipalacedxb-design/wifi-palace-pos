@@ -8,9 +8,10 @@ import {restaurant} from './modules/restaurant.mjs';
 import {petshop} from './modules/petshop.mjs';
 import {perfume} from './modules/perfume.mjs';
 import {meat} from './modules/meat.mjs';
+import {mobile} from './modules/mobile.mjs';
 export const CORE_KINDS=['settings','vendor','staff','customers','sales'];
 export const CORE_OWNER_KINDS=['settings','vendor','staff'];
-export const MODULES={salon,laundry,gym,grocery,restaurant,petshop,perfume,meat};
+export const MODULES={salon,laundry,gym,grocery,restaurant,petshop,perfume,meat,mobile};
 export const BUSINESS_TYPES=Object.keys(MODULES);
 export function businessModule(type='salon'){const m=Object.hasOwn(MODULES,type)?MODULES[type]:null;if(!m)throw Error('Unknown business type: '+type);return m}
 export function checkBusinessType(type){const t=type===undefined||type===null||type===''?'salon':type;if(typeof t!=='string'||!Object.hasOwn(MODULES,t))throw Error('Choose a supported business type.');return t}
