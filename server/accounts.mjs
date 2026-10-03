@@ -149,6 +149,25 @@ export function cashBook(db,business,from,to){
  return{from,to,books,notes:['Opening balances are the total of everything recorded in the POS before this period, not your real bank balance.','Cash: drawer sales, cash refunds, cash account payments, cash expenses, cash supplier payments and other cash in/out from daily closings. The opening float is not included.','Bank: card terminal takings (before bank fees), card account payments, and anything paid by bank / card.']};
 }
 
+// Records a supplier bill (and its payment when paid at once). Call inside a transaction.
+export function recordBill(db,u,d){
+  const b=u.business_id,bill={id:key(d.id),supplier_id:key(d.supplierId),number:text(d.number,60,'supplier invoice number'),date:dateKey(d.date,'bill date'),due:d.due?dateKey(d.due,'due date'):'',category:d.category,net:money(d.net,'amount before VAT'),vat:money(d.vat??0,'VAT amount'),note:optional(d.note,300)};
+  if(!BILL_CATEGORIES.includes(bill.category))fail(400,'Choose a category');
+  if(!bill.net)fail(400,'Enter the amount before VAT');if(bill.date>businessDay())fail(400,'The bill date cannot be in the future');if(bill.due&&bill.due<bill.date)fail(400,'The due date is before the bill date');
+  if(bill.vat>Math.ceil(bill.net*0.05)+100)fail(400,'VAT is more than 5% of the amount. Check the figures.');
+  bill.total=bill.net+bill.vat;
+  const pay=d.paid?{id:key(d.paid.id),method:d.paid.method}:null;if(pay&&!PAY_METHODS.includes(pay.method))fail(400,'Choose how the bill was paid');
+   const old=db.prepare('SELECT * FROM purchase_bills WHERE business_id=? AND id=?').get(b,bill.id);
+   if(old){if(Object.keys(bill).some(k=>old[k]!==bill[k]))fail(409,'Bill identifier already used');return 200}
+   if(!db.prepare('SELECT id FROM suppliers WHERE business_id=? AND id=?').get(b,bill.supplier_id))fail(404,'Supplier not found');
+   if(db.prepare('SELECT id FROM purchase_bills WHERE business_id=? AND supplier_id=? AND lower(number)=lower(?) AND voided_at IS NULL').get(b,bill.supplier_id,bill.number))fail(409,'This supplier invoice number is already recorded');
+   const now=new Date().toISOString();
+   db.prepare('INSERT INTO purchase_bills VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)').run(b,bill.id,bill.supplier_id,bill.number,bill.date,bill.due,bill.category,bill.net,bill.vat,bill.total,bill.note,u.id,now);
+   audit(db,u,'bill-created',bill.id);
+   if(pay){db.prepare('INSERT INTO supplier_payments VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)').run(b,pay.id,bill.supplier_id,bill.id,bill.date,bill.total,pay.method,'Paid on bill '+bill.number,u.id,now);audit(db,u,'supplier-paid',pay.id)}
+   return 201;
+
+}
 export async function accountsRoute({db,u,req,res,path,body,send}){
  const b=u.business_id,q=()=>new URL(req.url,'http://local').searchParams;
  const txn=fn=>{db.exec('BEGIN IMMEDIATE');try{const r=fn();db.exec('COMMIT');return r}catch(e){db.exec('ROLLBACK');throw e}};
@@ -172,23 +191,8 @@ export async function accountsRoute({db,u,req,res,path,body,send}){
   send(res,200,{ok:true,id:s.id});return true;
  }
  if(path==='/api/finance/bills'){
-  const d=await body(req),bill={id:key(d.id),supplier_id:key(d.supplierId),number:text(d.number,60,'supplier invoice number'),date:dateKey(d.date,'bill date'),due:d.due?dateKey(d.due,'due date'):'',category:d.category,net:money(d.net,'amount before VAT'),vat:money(d.vat??0,'VAT amount'),note:optional(d.note,300)};
-  if(!BILL_CATEGORIES.includes(bill.category))fail(400,'Choose a category');
-  if(!bill.net)fail(400,'Enter the amount before VAT');if(bill.date>businessDay())fail(400,'The bill date cannot be in the future');if(bill.due&&bill.due<bill.date)fail(400,'The due date is before the bill date');
-  if(bill.vat>Math.ceil(bill.net*0.05)+100)fail(400,'VAT is more than 5% of the amount. Check the figures.');
-  bill.total=bill.net+bill.vat;
-  const pay=d.paid?{id:key(d.paid.id),method:d.paid.method}:null;if(pay&&!PAY_METHODS.includes(pay.method))fail(400,'Choose how the bill was paid');
-  const status=txn(()=>{
-   const old=db.prepare('SELECT * FROM purchase_bills WHERE business_id=? AND id=?').get(b,bill.id);
-   if(old){if(Object.keys(bill).some(k=>old[k]!==bill[k]))fail(409,'Bill identifier already used');return 200}
-   if(!db.prepare('SELECT id FROM suppliers WHERE business_id=? AND id=?').get(b,bill.supplier_id))fail(404,'Supplier not found');
-   if(db.prepare('SELECT id FROM purchase_bills WHERE business_id=? AND supplier_id=? AND lower(number)=lower(?) AND voided_at IS NULL').get(b,bill.supplier_id,bill.number))fail(409,'This supplier invoice number is already recorded');
-   const now=new Date().toISOString();
-   db.prepare('INSERT INTO purchase_bills VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)').run(b,bill.id,bill.supplier_id,bill.number,bill.date,bill.due,bill.category,bill.net,bill.vat,bill.total,bill.note,u.id,now);
-   audit(db,u,'bill-created',bill.id);
-   if(pay){db.prepare('INSERT INTO supplier_payments VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)').run(b,pay.id,bill.supplier_id,bill.id,bill.date,bill.total,pay.method,'Paid on bill '+bill.number,u.id,now);audit(db,u,'supplier-paid',pay.id)}
-   return 201});
-  send(res,status,{ok:true,id:bill.id});return true;
+  const d=await body(req),status=txn(()=>recordBill(db,u,d));
+  send(res,status,{ok:true,id:d.id});return true;
  }
  if(path==='/api/finance/supplier-payments'){
   const d=await body(req),p={id:key(d.id),supplier_id:key(d.supplierId),bill_id:d.billId?key(d.billId):'',date:dateKey(d.date,'payment date'),amount:money(d.amount),method:d.method,note:optional(d.note,200)};

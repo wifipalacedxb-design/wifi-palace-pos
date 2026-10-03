@@ -10,6 +10,9 @@ import {initFinance,financeRoute} from './finance.mjs';
 import {initSignup,signupRoute,signupMailer} from './signup.mjs';
 import {initRecovery,recoveryRoute,recoveryMailer} from './recovery.mjs';
 import {initBilling,billingConfig,stripeClient,billingRoute,billingWebhook,billingLocked} from './billing.mjs';
+import {initMarketing,marketingRoute} from './marketing.mjs';
+import {initHr,hrRoute} from './hr.mjs';
+import {initRecipes,recipesRoute} from './recipes.mjs';
 import {initStaff,staffRoute,isWaiter,waiterGuard} from './staff.mjs';
 import {initDemo,isDemo,demoRoute,scheduleDemos} from './demo.mjs';
 import {recentState,changesSince,registerTill,offlineHours,HISTORY_DAYS} from './sync.mjs';
@@ -21,6 +24,7 @@ export async function start({billing=null,recoveryMail=recoveryMailer(),mailer=s
  initSignup(db);
  initRecovery(db);
  initStaff(db);
+ initMarketing(db);initHr(db);initRecipes(db);
  initDemo(db);
  initBilling(db);
  const payCfg=billing?.cfg||billingConfig(),stripe=billing?.stripe||(payCfg.key?stripeClient(payCfg.key):null);
@@ -39,7 +43,7 @@ export async function start({billing=null,recoveryMail=recoveryMailer(),mailer=s
    if(path==='/health'){send(res,200,{ok:true});return}
    const providerFiles={'/pos':'pos.html','/pos.js':'pos.js','/demo':'demo.html','/demo.js':'demo.js','/recover':'recovery.html','/recovery.js':'recovery.js','/signup':'signup.html','/signup.js':'signup.js','/admin':'provider.html','/activate':'provider.html','/provider.js':'provider.js'};
    if(providerFiles[path]&&req.method==='GET'){const data=await readFile(join(root,'web',providerFiles[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(data);return}
-   if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/accounts.js':'accounts.js','/billing.js':'billing.js','/staff.js':'staff.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/gym.js':'gym.js','/charts.js':'charts.js','/grocery.js':'grocery.js','/petshop.js':'petshop.js','/perfume.js':'perfume.js','/meat.js':'meat.js','/restaurant.js':'restaurant.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg','/apple-touch-icon.png':'apple-touch-icon.png','/favicon.ico':'icon.svg'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.png')?'image/png':path.endsWith('.svg')||path==='/favicon.ico'?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
+   if(!path.startsWith('/api/')){const files={'/':'index.html','/index.html':'index.html','/whatsapp.js':'whatsapp.js','/finance.js':'finance.js','/accounts.js':'accounts.js','/billing.js':'billing.js','/staff.js':'staff.js','/extras.js':'extras.js','/cloud.js':'cloud.js','/i18n.js':'i18n.js','/laundry.js':'laundry.js','/gym.js':'gym.js','/charts.js':'charts.js','/grocery.js':'grocery.js','/petshop.js':'petshop.js','/perfume.js':'perfume.js','/meat.js':'meat.js','/restaurant.js':'restaurant.js','/sync-core.js':'sync-core.js','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icon.svg':'icon.svg','/apple-touch-icon.png':'apple-touch-icon.png','/favicon.ico':'icon.svg'};if(!files[path]||req.method!=='GET')throw new ApiError(404,'Not found');const data=await readFile(join(root,'web',files[path]));res.writeHead(200,{'Content-Type':path.endsWith('.js')?'text/javascript':path.endsWith('.png')?'image/png':path.endsWith('.svg')||path==='/favicon.ico'?'image/svg+xml':path.endsWith('.webmanifest')?'application/manifest+json':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data);return}
    if(path==='/api/stripe/webhook'&&req.method==='POST'){if(!payCfg.webhookSecret||!stripe)throw new ApiError(404,'Not found');await billingWebhook({db,req,res,send,cfg:payCfg,stripe});return}
    if(req.method!=='GET'){
     if(req.headers.origin&&req.headers.origin!==origin)throw new ApiError(403,'Origin not allowed');
@@ -74,6 +78,9 @@ export async function start({billing=null,recoveryMail=recoveryMailer(),mailer=s
    if(isDemo(db,u.business_id)&&(path==='/api/password'||path.startsWith('/api/users')&&req.method!=='GET'))throw new ApiError(403,'Not available in the demo shop');
    if(path.startsWith('/api/billing/')&&req.method!=='GET'&&isDemo(db,u.business_id))throw new ApiError(403,'Not available in the demo shop');
    if(await billingRoute({db,u,req,res,path,body,send,origin,cfg:payCfg,stripe}))return;
+   if(await marketingRoute({db,u,req,res,path,body,send,limited,waiter:isWaiter(db,u)}))return;
+   if(await hrRoute({db,u,req,res,path,body,send,limited}))return;
+   if(await recipesRoute({db,u,req,res,path,body,send}))return;
    if(await financeRoute({db,u,req,res,path,body,send}))return;
    if(path==='/api/me'&&req.method==='GET'){send(res,200,{user:publicUser(u),csrf:u.csrf});return}
    if(path==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(hash(token));send(res,200,{ok:true},{'Set-Cookie':`salon_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure?'; Secure':''}`});return}
