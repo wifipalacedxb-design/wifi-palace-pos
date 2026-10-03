@@ -6,16 +6,18 @@
 (function(){
  'use strict';
  const RetailUI=window.RetailUI=window.RetailUI||{screens:{}};RetailUI.ext??={};
- const OWN=['Dashboard','Checkout','Products','Stock','Credit','Pets','Grooming','Boarding','Blends','Clients','Orders','Breakdown','Repairs','IMEI','Tailoring','Measurements','Quotes','Serials','Jobs','RMA'];
+ const OWN=['Dashboard','Checkout','Products','Stock','Credit','Pets','Grooming','Boarding','Blends','Clients','Orders','Breakdown','Repairs','IMEI','Tailoring','Measurements','Quotes','Serials','Jobs','RMA','Spectacles','Prescriptions','Eye tests','Claims','Recalls'];
  const OWNER_ONLY=['Dashboard','Sales','Settings','Finance','Reports','Team'];
  const GROCERY_CATEGORIES=['Fruits & vegetables','Dairy & eggs','Bakery','Meat & fish','Rice, flour & grains','Cooking & spices','Snacks & sweets','Drinks','Frozen','Household & cleaning','Personal care','Baby','Tobacco','Other'];
  const CREDIT='Credit (account)';
  const PET_CATEGORIES=['Dog food','Cat food','Bird & fish food','Treats','Accessories','Toys','Health & hygiene','Litter & cages','Aquarium','Live animals','Grooming','Boarding & daycare','Other'];
  // The pet shop uses these same screens (products, stock, checkout, credit) plus its own Pets, Grooming and Boarding (petshop.js).
  const isPet=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='petshop';
- const isGrocery=()=>typeof cloudUser!=='undefined'&&['grocery','petshop','perfume','meat','mobile','tailor','electronics'].includes(cloudUser?.businessType);
+ const isGrocery=()=>typeof cloudUser!=='undefined'&&['grocery','petshop','perfume','meat','mobile','tailor','electronics','optical'].includes(cloudUser?.businessType);
  const isTailor=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='tailor';
  const TAILOR_CATEGORIES=['Abayas','Sheilas & scarves','Kaftans & jalabiyas','Kanduras','Dresses','Fabric','Lace & trims','Accessories','Stitching','Alterations','Other'];
+ const isOptical=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='optical';
+ const OPTICAL_CATEGORIES=['Frames','Sunglasses','Reading glasses','Contact lenses','Lens solutions','Accessories','Lenses','Services','Other'];
  const isElec=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='electronics';
  const ELEC_CATEGORIES=['Laptops','Desktops & all-in-ones','Used devices','Monitors','TVs','Printers & scanners','Components','Storage','Networking','CCTV & security','Peripherals','Cables & adapters','Home appliances','Software','Parts','Services','Other'];
  const isMobile=()=>typeof cloudUser!=='undefined'&&cloudUser?.businessType==='mobile';
@@ -27,19 +29,19 @@
  const X=()=>RetailUI.ext[cloudUser?.businessType]||{}; // per-type add-ons (petshop.js, perfume.js)
  const dec=u=>!!u&&u!=='piece'; // sold in decimals: kg, ml, g, tola
  const per=u=>dec(u)?' / '+u:'';
- const CATS=()=>isElec()?ELEC_CATEGORIES:isTailor()?TAILOR_CATEGORIES:isMobile()?MOBILE_CATEGORIES:isPet()?PET_CATEGORIES:isPerf()?PERFUME_CATEGORIES:isMeat()?MEAT_CATEGORIES:GROCERY_CATEGORIES;
+ const CATS=()=>isOptical()?OPTICAL_CATEGORIES:isElec()?ELEC_CATEGORIES:isTailor()?TAILOR_CATEGORIES:isMobile()?MOBILE_CATEGORIES:isPet()?PET_CATEGORIES:isPerf()?PERFUME_CATEGORIES:isMeat()?MEAT_CATEGORIES:GROCERY_CATEGORIES;
  const isSvc=i=>i?.type==='service';
  const K=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
  const isOwner=()=>cloudUser?.role==='owner';
  const PET_TABS=['Grooming','Boarding','Pets'];
- const tabs=()=>{const pet=isPet()?PET_TABS:isPerf()?['Blends','Clients']:isMeat()?['Orders','Breakdown']:isMobile()?['Repairs','IMEI']:isElec()?['Quotes','Repairs','Serials','Jobs','RMA']:isTailor()?['Tailoring','Measurements']:[];return isOwner()?['Dashboard','Checkout',...pet,'Products','Stock','Credit','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:['Checkout',...pet,'Products','Stock','Credit','Customers','My sales','Sync centre','Account']};
+ const tabs=()=>{const pet=isPet()?PET_TABS:isPerf()?['Blends','Clients']:isMeat()?['Orders','Breakdown']:isMobile()?['Repairs','IMEI']:isElec()?['Quotes','Repairs','Serials','Jobs','RMA']:isOptical()?['Spectacles','Prescriptions','Eye tests','Claims','Recalls']:isTailor()?['Tailoring','Measurements']:[];return isOwner()?['Dashboard','Checkout',...pet,'Products','Stock','Credit','Customers','Sales','Settings','Finance','Reports','Team','Sync centre','Account']:['Checkout',...pet,'Products','Stock','Credit','Customers','My sales','Sync centre','Account']};
  const localDay=(d=new Date())=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
  const qtyText=(q,unit)=>unit&&unit!=='piece'?(+q.toFixed(3))+' '+unit:String(+q.toFixed(3));
  const line=i=>Math.round(i.price*i.qty);
  let cart=[],cartCustomer='',scanText='',productSearch='',productFilter='All',stockSearch='',creditSearch='';
 
  // --- derived data ---------------------------------------------------------------------------------
- function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['grocery_items','grocery_stock','grocery_payments','grocery_config','pets','appointments','pet_stays','perfume_blends','perfume_profiles','perfume_points','mobile_units','mobile_repairs','mobile_buys','tailor_orders','tailor_measurements','elec_quotes','elec_rma','elec_jobs'])db[k]??=[]}}
+ function shim(){if(db){db.services??=[];db.appointments??=[];for(const k of ['grocery_items','grocery_stock','grocery_payments','grocery_config','pets','appointments','pet_stays','perfume_blends','perfume_profiles','perfume_points','mobile_units','mobile_repairs','mobile_buys','tailor_orders','tailor_measurements','elec_quotes','elec_rma','elec_jobs','optical_rx','optical_orders','optical_tests','optical_claims','optical_recalls'])db[k]??=[]}}
  // Stock and credit come from the server's totals across every till (cache.summary), plus this device's
  // own changes that have not synced yet. Without a summary (older server) they are computed locally.
  const pendingOps=()=>(typeof cache!=='undefined'&&cache?.pending)||[];

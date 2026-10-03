@@ -24,7 +24,8 @@ export const DEMO_SHOPS={
  meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'},
  mobile:{slug:'demo-mobile',name:'Smart Zone Mobiles',blurb:'IMEI tracking, warranty, repair job cards, used phones & trade-in'},
  tailor:{slug:'demo-tailor',name:'Noor Abayas & Tailoring',blurb:'Stitching orders, measurements, ready-made abayas, fabric by the metre'},
- electronics:{slug:'demo-electronics',name:'Tech Hub Computers',blurb:'Serial numbers & warranty, quotations, repairs, delivery & installation, RMA'}
+ electronics:{slug:'demo-electronics',name:'Tech Hub Computers',blurb:'Serial numbers & warranty, quotations, repairs, delivery & installation, RMA'},
+ optical:{slug:'demo-optical',name:'Clear Vision Opticals',blurb:'Prescriptions, spectacle orders, insurance claims, eye tests, reminders'}
 };
 const PEOPLE=[['Fatima Al Mansoori','0501234501'],['Ahmed Khan','0551234502'],['Priya Nair','0521234503'],['Omar Haddad','0561234504'],['Sara Ahmed','0501234505'],['John Mathew','0581234506'],['Aisha Rahman','0541234507'],['Mohammed Ali','0501234508'],['Maria Santos','0551234509'],['Rashid Al Suwaidi','0521234510'],['Noura Saeed','0561234511'],['Vikram Patel','0501234512'],['Layla Hassan','0541234513'],['Yusuf Qureshi','0551234514'],['Elena Petrova','0581234515']];
 
@@ -262,6 +263,47 @@ const BUILD={
   claim('HP 15 laptop i5 16GB 512GB',sn(),'Does not power on','HP service centre',cust[6]);
   claim('Wi-Fi 6 router','','Dead on arrival','Al Khoory Computer Trading','',[{status:'Sent',ref:'AK-9950'},{status:'Back',outcome:'Credit note'},{status:'Closed'}]);
  },
+ optical(c,cust){
+  c.put('staff','t1',{name:'Dr Sara (optometrist)'});c.put('staff','t2',{name:'Optician Imran'});
+  const B={branch:'main'};
+  for(const [id,n] of [['fr1',40],['fr2',36],['fr3',24],['sg1',60],['rg1',90],['cl1',120],['cl2',120],['so1',140],['ac1',160]])c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost:c.get('grocery_items',id).price*0.4|0,supplier:'Gulf Optics Trading',invoice:'GO-'+c.int(1000,9999),...B,at:at(DAYS,10)});
+  for(let d=DAYS-1;d>=1;d--){
+   for(let k=0;k<perDay(c,d,3);k++)c.sale([{id:c.pick(['sg1','sg1','rg1','so1','ac1','cl1','cl2']),qty:1},...(c.r()<.4?[{id:c.pick(['so1','ac1']),qty:1}]:[])],{date:at(d,c.int(10,22),c.int(0,59)),customerId:c.r()<.4?c.pick(cust):'',extra:B});
+   if(c.r()<.7)c.sale([{id:c.pick(['fr1','fr2','fr3']),qty:1},{id:c.pick(['ln1','ln1','ln2','ln3','ln4']),qty:1}],{date:at(d,c.int(11,21),c.int(0,59)),customerId:c.pick(cust),method:c.pick(['Cash','Card (external terminal)']),extra:B});
+   if(c.r()<.6)c.sale([{id:'sv1',qty:1}],{date:at(d,c.int(10,20),c.int(0,59)),customerId:c.pick(cust),extra:B});
+  }
+  const P=[[['-2.50','-0.75','90',''],['-2.25','-0.50','85','']],[['+1.00','','','+1.50'],['+1.25','','','+1.50']],[['-4.00','-1.25','10',''],['-3.75','-1.00','170','']],[['-0.75','','',''],['-1.00','-0.50','95','']],[['+0.50','-0.50','180','+2.00'],['+0.75','','','+2.00']],[['-1.50','','',''],['-1.50','','','']]];
+  const rx=n=>{const [r,l]=P[n%P.length],e=([sph,cyl,axis,add])=>({sph,cyl,axis,add});return{right:e(r),left:e(l),pd:String(60+n%6)}};
+  cust.slice(0,9).forEach((id,n)=>{c.put('optical_rx',uid(),{customerId:id,date:addDays(uaeDay(),-(n*37+3)),type:rx(n).right.add?'Progressive / bifocal':'Distance',...rx(n),optometrist:'Dr Sara (optometrist)',source:n%4===3?'outside':'shop',note:''});
+   if(n%3===0)c.put('optical_rx',uid(),{customerId:id,date:addDays(uaeDay(),-(n*37+380)),type:'Distance',...rx(n+1),optometrist:'Dr Sara (optometrist)',note:''})});
+  // spectacle orders in every stage
+  let k=0;const order=(dueIn,frameItemId,lensItemId,lensPrice,lensDetails,{advance=0,steps=[],deliver=false,insurer}={})=>{const id=uid(),n=k++,customerId=cust[n%cust.length];
+   c.put('optical_orders',id,{status:'Ordered',customerId,frameItemId,lensItemId,lensPrice,lensDetails,rxType:rx(n).right.add?'Progressive / bifocal':'Distance',...rx(n),due:addDays(uaeDay(),dueIn),advance,lab:'Vision Lab Sharjah',note:''});
+   if(advance)c.put('grocery_payments',uid(),{customerId,amount:advance,method:'Cash',note:'Advance · spectacles',at:at(Math.max(0,3-dueIn),12)});
+   for(const st of steps)c.put('optical_orders',id,{status:st,...(st==='At lab'?{labRef:'VL-'+c.int(1000,9999)}:{})});
+   if(deliver){const day=Math.max(0,-dueIn),s=c.sale([...(frameItemId?[{id:frameItemId,qty:1}]:[]),{id:lensItemId,qty:1,price:lensPrice}],{date:at(day,17),method:advance||insurer?'Credit (account)':'Card (external terminal)',customerId,extra:B});
+    let owed=advance||insurer?s.total-advance:0;
+    if(insurer){const share=Math.round(s.total*0.7/100)*100,cl=c.put('optical_claims',uid(),{status:'To submit',saleId:s.id,insurer:insurer[0],memberId:insurer[0].slice(0,2).toUpperCase()+'-'+c.int(100000,999999),approval:'AP-'+c.int(10000,99999),amount:share});owed-=share;
+     for(const st of insurer[1])c.put('optical_claims',cl.id,st==='Paid'?{status:'Paid',paidAmount:share}:{status:st,claimRef:'CLM-'+c.int(10000,99999)});
+     if(insurer[1].includes('Paid'))c.put('grocery_payments',uid(),{customerId,amount:share,method:'Insurance',note:insurer[0]+' claim',at:at(Math.max(0,day-2),11)})}
+    if(owed>0)c.put('grocery_payments',uid(),{customerId,amount:owed,method:'Cash',note:'Balance on collection',at:at(day,17)});
+    c.put('optical_orders',id,{status:'Delivered',saleId:s.id})}};
+  order(-9,'fr1','ln2',35000,'1.60 index, anti-glare',{advance:20000,steps:['At lab','Ready'],deliver:true,insurer:['Daman',['Submitted','Paid']]});
+  order(-6,'fr2','ln3',85000,'Progressive, 1.67 index',{advance:50000,steps:['At lab','Ready'],deliver:true,insurer:['NAS',['Submitted']]});
+  order(-4,'','ln1',20000,'Customer’s frame, anti-glare',{steps:['At lab','Ready'],deliver:true});
+  order(-2,'fr3','ln2',35000,'Kids, impact resistant',{advance:20000,steps:['At lab','Ready'],deliver:true,insurer:['Sukoon (Oman Insurance)',[]]});
+  order(-1,'fr1','ln4',55000,'Photochromic brown',{advance:30000,steps:['At lab','Ready']});
+  order(0,'fr2','ln1',20000,'Anti-glare',{advance:20000,steps:['At lab','Ready']});
+  order(-1,'fr1','ln3',85000,'Progressive, blue cut',{advance:40000,steps:['At lab']});
+  order(1,'fr2','ln2',35000,'1.56 index',{advance:20000,steps:['At lab']});
+  order(2,'fr3','ln1',20000,'',{advance:10000});
+  order(3,'','ln3',90000,'Progressive, customer’s frame',{advance:40000});
+  // eye tests and recalls
+  const test=(dayIn,hour,n,status)=>{const t=new Date(Date.parse(addDays(uaeDay(),dayIn)+'T00:00:00Z')+(hour-4)*3600000).toISOString(),x=c.put('optical_tests',uid(),{status:'Booked',customerId:cust[n%cust.length],when:t,optometrist:'Dr Sara (optometrist)',note:c.pick(['','First test','Contact lens fitting','Headaches when reading'])});if(status)c.put('optical_tests',x.id,{status})};
+  test(-2,11,3,'Done');test(-1,17,4,'Done');test(-1,18,5,'No-show');test(0,11,6);test(0,16,7);test(0,18,8);test(1,10,9);test(1,17,10);test(2,12,11);test(4,18,12);
+  const recall=(n,type,dueIn,about)=>c.put('optical_recalls',uid(),{status:'Open',type,customerId:cust[n%cust.length],due:addDays(uaeDay(),dueIn),about});
+  recall(1,'contact',-2,'Monthly contact lenses (box of 6)');recall(4,'contact',3,'Daily contact lenses (box of 30)');recall(6,'test',-5,'Yearly eye test');recall(8,'test',1,'Yearly eye test');recall(10,'test',6,'Yearly eye test');recall(2,'contact',25,'Monthly contact lenses (box of 6)');recall(11,'test',40,'Yearly eye test');
+ },
 };
 
 // One restaurant order: table/takeaway/delivery, a kitchen ticket and (unless left open) the paid bill.
@@ -291,7 +333,7 @@ export function topUp(db,type){
  const cat=businessModule(type).catalogKind,items=c.list(cat).filter(i=>type==='gym'?i.type==='product':type==='restaurant'?false:!(i.system||i.serial||i.type==='service'&&type!=='salon'&&type!=='petshop'));
  if(type==='restaurant'){for(const t of times.slice(0,3))restaurantRunner(c,cust)(0,c.pick(['dine-in','takeaway']),{opened:new Date(Date.parse(t)-40*60000).toISOString()});return}
  for(const t of times){const lines=[...new Set(Array.from({length:c.int(1,3)},()=>c.pick(items).id))].map(id=>{const it=items.find(x=>x.id===id);return{id,qty:it.unit&&it.unit!=='piece'?(it.unit==='kg'?c.int(5,20)/10:c.int(3,10)):1}});
-  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile','tailor','electronics'].includes(type)?{branch:'main'}:{}})}
+  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile','tailor','electronics','optical'].includes(type)?{branch:'main'}:{}})}
 }
 
 async function buildOne(db,type){
