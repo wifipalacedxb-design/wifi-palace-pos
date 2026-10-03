@@ -13,7 +13,9 @@ function validate(db,u,kind,key,data,old){
   const dob=data.dob??old?.dob??'';
   const today=new Date(Date.now()+4*3600000).toISOString().slice(0,10);
   if(typeof dob!=='string'||(dob&&(!/^\d{4}-\d{2}-\d{2}$/.test(dob)||!Number.isFinite(Date.parse(dob))||new Date(dob).toISOString().slice(0,10)!==dob||dob<'1900-01-01'||dob>today)))fail('Enter a valid date of birth, from 1900 through today');
-  return{id:key,name:required(data.name,100),phone:text(data.phone,40),dob};
+  // Company customers: their TRN and address print on the tax invoice.
+  const trn=text(String(data.trn??old?.trn??''),20).replace(/\s/g,''),address=text(data.address??old?.address??'',200);if(trn&&!/^\d{15}$/.test(trn))fail('A UAE TRN is 15 digits');
+  return{id:key,name:required(data.name,100),phone:text(data.phone,40),dob,...(trn?{trn}:{}),...(address?{address}:{})};
  }
  if(kind==='sales'){
   if(old){if(u.role!=='owner')fail('Only the salon owner can refund a sale',403);if(old.status!=='Paid'||data.status!=='Refunded')fail('Saved sales cannot be edited',409);return{...old,status:'Refunded',refundReason:required(data.refundReason,500),refundDate:new Date().toISOString(),refundedBy:u.id,creditNote:documentNumber('CN',nextNumber(db,salon,'credit-note'))};}
@@ -42,10 +44,10 @@ function validate(db,u,kind,key,data,old){
   let commission={};
   if(data.staffId){const stylist=get(db,salon,'staff',data.staffId);if(!stylist)fail('Stylist no longer exists',409);const rate=stylist.commissionBps||0;if(data.commissionBps!==rate)fail('Stylist commission changed. Review this pending sale.',409);commission={staffId:stylist.id,commissionBps:rate,commissionAmount:Math.round((sub-off)*rate/10000)};}
   // The tax invoice number is issued here, in upload order, so numbers are sequential with no gaps even when bills were made offline.
-  const ref=text(data.ref??'',100);
+  const ref=text(data.ref??'',100),lpo=text(data.lpo??'',40);
   // Business types with several branches (perfume): each sale belongs to the branch of the till that made it (stock per branch).
   let branch='';if(typeof mod.branches==='function'){const ids=mod.branches(db,salon);if(ids.length){if(!ids.includes(data.branch))fail('Choose this till\'s branch before selling',409);branch=data.branch}}
-  return {...commission,...(ref?{ref}:{}),...(branch?{branch}:{}),id:key,number:claimTillNumber(db,salon,data.number)?data.number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:settingsRow.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:credit?0:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
+  return {...commission,...(ref?{ref}:{}),...(lpo?{lpo}:{}),...(customer?.trn?{customerTrn:customer.trn}:{}),...(customer?.address?{customerAddress:customer.address}:{}),...(branch?{branch}:{}),id:key,number:claimTillNumber(db,salon,data.number)?data.number:documentNumber('INV',nextNumber(db,salon,'invoice')),receiptRef:'SD-'+key.replace(/[^a-zA-Z0-9]/g,'').toUpperCase(),documentType:settingsRow.trn?'Tax invoice':'Receipt',date:data.date,items,sub,off,tax,total,customerId,customer:customer?.name||'Walk-in customer',staff:commission.staffId?get(db,salon,'staff',commission.staffId).name:required(data.staff,100),method:data.method,cashAmount,cardAmount,cashReceived,received,change:credit?0:received-total,shop,status:'Paid',createdBy:u.id,syncedAt:new Date().toISOString()};
  }
  fail('Unknown record type');
 }

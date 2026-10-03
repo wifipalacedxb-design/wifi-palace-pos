@@ -9,7 +9,7 @@ test('mail adapter uses server credentials and fixed endpoint; signup assets ser
 test('signup records the business type, defaults to salon and refuses unsupported types',async t=>{const f=await fixture(t);
  const bad=await f.call('/api/signup/request',{...registration,email:'bad@example.com',type:'spaceship'});assert.equal(bad.status,400);assert.equal(f.messages.length,0);
  assert.equal((await f.call('/api/signup/request',{...registration,email:'proto@example.com',type:'constructor'})).status,400);
- assert.deepEqual((await f.call('/api/signup/status')).body.businessTypes,['salon','laundry','gym','grocery','restaurant','petshop','perfume','meat','mobile','tailor']);
+ assert.deepEqual((await f.call('/api/signup/status')).body.businessTypes,['salon','laundry','gym','grocery','restaurant','petshop','perfume','meat','mobile','tailor','electronics']);
  assert.equal((await f.call('/api/signup/request',{...registration,type:'salon'})).status,202);
  const token=f.messages[0].url.split('#')[1];const r=await f.call('/api/signup/verify',{token,password});assert.equal(r.status,201);assert.equal(r.body.businessType,'salon');assert.equal(r.body.businessCode,r.body.salonCode);
  assert.equal(f.db.prepare('SELECT type FROM businesses WHERE slug=?').get(r.body.businessCode).type,'salon');

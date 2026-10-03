@@ -25,7 +25,7 @@ test('salon is the default business type and keeps its seed data',async()=>{
 });
 
 test('unknown business types are refused',async()=>{
- assert.deepEqual(BUSINESS_TYPES,['salon','laundry','gym','grocery','restaurant','petshop','perfume','meat','mobile','tailor']);
+ assert.deepEqual(BUSINESS_TYPES,['salon','laundry','gym','grocery','restaurant','petshop','perfume','meat','mobile','tailor','electronics']);
  assert.equal(checkBusinessType(undefined),'salon');
  for(const t of ['restaurant-x','','__proto__','constructor',42])if(t!=='')assert.throws(()=>checkBusinessType(t));
  const {dir,db}=fresh();

@@ -25,48 +25,30 @@ const nextNumber=(db,business,name)=>db.prepare('INSERT INTO counters(business_i
 // Warranty end date for something sold today (UAE date), or '' when the product has no warranty.
 export const warrantyUntil=(months,from=new Date())=>{if(!months)return '';const d=new Date(from.getTime()+4*3600000);d.setUTCMonth(d.getUTCMonth()+months);return d.toISOString().slice(0,10)};
 
-export const mobile={
- type:'mobile',
- label:'Mobile shop',
+// The same engine serves phone shops (IMEI) and electronics & computer shops (serial numbers): only the catalogue,
+// the wording and any extra record kinds differ.
+export const serialShop=({type,label,categories,serviceTypes,tag='IMEI',thing='phone',seed,kinds=[],more})=>({
+ type,
+ label,
  catalogKind:'grocery_items',
- kinds:['grocery_items','grocery_stock','grocery_payments','grocery_config','mobile_units','mobile_repairs','mobile_buys'],
+ kinds:['grocery_items','grocery_stock','grocery_payments','grocery_config','mobile_units','mobile_repairs','mobile_buys',...kinds],
  ownerKinds:['grocery_items','grocery_config'],
  deletable:['grocery_items'],
  creditSales:true,
  maxPieces:1000,
  branches:branchIds,
  summary:perfume.summary, // stock per product and per branch, customer credit
- seed:()=>({
-  grocery_items:[
-   {id:'ph1',name:'iPhone 15 128GB',barcode:'',category:'Phones',unit:'piece',price:299900,cost:0,minStock:1,serial:true,warrantyMonths:12},
-   {id:'ph2',name:'Samsung Galaxy A55 256GB',barcode:'',category:'Phones',unit:'piece',price:139900,cost:0,minStock:1,serial:true,warrantyMonths:12},
-   {id:'ph3',name:'Redmi 13C 128GB',barcode:'',category:'Phones',unit:'piece',price:44900,cost:0,minStock:2,serial:true,warrantyMonths:12},
-   {id:'us1',name:'Used phone',barcode:'',category:'Used phones',unit:'piece',price:50000,cost:0,minStock:0,serial:true,warrantyMonths:1,openPrice:true},
-   {id:'ac1',name:'Tempered glass',barcode:'',category:'Cases & protectors',unit:'piece',price:2500,cost:0,minStock:20},
-   {id:'ac2',name:'Silicone case',barcode:'',category:'Cases & protectors',unit:'piece',price:3500,cost:0,minStock:20},
-   {id:'ac3',name:'20W fast charger',barcode:'',category:'Chargers & cables',unit:'piece',price:5900,cost:0,minStock:10,warrantyMonths:6},
-   {id:'ac4',name:'USB-C cable 1m',barcode:'',category:'Chargers & cables',unit:'piece',price:2500,cost:0,minStock:20},
-   {id:'ac5',name:'Wireless earbuds',barcode:'',category:'Audio',unit:'piece',price:9900,cost:0,minStock:5,warrantyMonths:6},
-   {id:'pt1',name:'iPhone screen (compatible)',barcode:'',category:'Parts',unit:'piece',price:25000,cost:0,minStock:2,openPrice:true},
-   {id:'pt2',name:'Battery (compatible)',barcode:'',category:'Parts',unit:'piece',price:9000,cost:0,minStock:3,openPrice:true},
-   {id:'sv1',type:'service',serviceType:'repair',name:'Repair labour',barcode:'',category:'Repair services',unit:'piece',price:5000,cost:0,minStock:0,duration:60,openPrice:true},
-   {id:'sv2',type:'service',serviceType:'recharge',name:'Mobile recharge',barcode:'',category:'SIM & recharge',unit:'piece',price:1000,cost:0,minStock:0,duration:5,openPrice:true},
-   {id:'sv3',type:'service',serviceType:'sim',name:'New SIM card',barcode:'',category:'SIM & recharge',unit:'piece',price:5500,cost:0,minStock:0,duration:10,openPrice:true}
-  ],
-  staff:[{id:'t1',name:'Sales 1'}],
-  grocery_stock:[],grocery_payments:[],grocery_config:[{id:'config',scale:{...SCALE_DEFAULT},branches:[{id:'main',name:'Main shop'}]}],
-  mobile_units:[],mobile_repairs:[],mobile_buys:[]
- }),
+ seed,
  // Bill lines. A phone tracked by IMEI is sold one unit per line, naming the unit; the invoice prints its IMEI
  // and warranty. Other products just print their warranty, if any.
  lineOptions(item,line,ctx){
   const out={price:item.price,options:[],note:text(line.note??'',100)},until=warrantyUntil(item.warrantyMonths);
   if(item.serial){
-   const ids=Array.isArray(line.options)?line.options:[];if(ids.length!==1||line.qty!==1)fail('Choose the IMEI for '+item.name+' (one phone per line)',409);
+   const ids=Array.isArray(line.options)?line.options:[];if(ids.length!==1||line.qty!==1)fail('Choose the '+tag+' for '+item.name+' (one '+thing+' per line)',409);
    const id=typeof ids[0]==='object'&&ids[0]?ids[0].id:ids[0],unit=ctx?get(ctx.db,ctx.business,'mobile_units',required(id,100)):null;
-   if(!unit||unit.itemId!==item.id)fail('This IMEI is not in stock for '+item.name+'. Review the bill.',409);
-   if(unit.status!=='in')fail('IMEI '+unit.imei+' was already sold. Review the bill.',409);
-   out.options.push('IMEI '+unit.imei);
+   if(!unit||unit.itemId!==item.id)fail('This '+tag+' is not in stock for '+item.name+'. Review the bill.',409);
+   if(unit.status!=='in')fail(tag+' '+unit.imei+' was already sold. Review the bill.',409);
+   out.options.push(tag+' '+unit.imei);
   }
   if(until)out.options.push('Warranty until '+until);
   return out;
@@ -74,7 +56,7 @@ export const mobile={
  validate(args){
   const {db,business,kind,key,data,old,u}=args;
   if(kind.startsWith('grocery_'))return retailValidate(args,{
-   categories:MOBILE_CATEGORIES,serviceTypes:['repair','recharge','sim','other'],branches:branchIds,paymentMethods:['Trade-in'],
+   categories,serviceTypes,branches:branchIds,paymentMethods:['Trade-in'],
    itemExtra:({data})=>{const x={};
     if(data.serial===true){if(data.type==='service'||data.unit!=='piece')fail('Only products sold per piece can be tracked by IMEI');x.serial=true}
     if(data.warrantyMonths){if(!Number.isInteger(data.warrantyMonths)||data.warrantyMonths<0||data.warrantyMonths>60)fail('Warranty is 0 to 60 months');x.warrantyMonths=data.warrantyMonths}
@@ -129,6 +111,30 @@ export const mobile={
    const now=new Date().toISOString();
    return{id:key,number:nextNumber(db,business,'mobile-repair'),customerId:c.id,customer:c.name,phone:c.phone||'',device:required(data.device,100),imei:data.imei?imei(data.imei):'',fault:required(data.fault,300),accessories:text(data.accessories??'',200),estimate:amount(data.estimate??0),due:due(data.due),technician:text(data.technician??'',100),diagnosis:'',note:text(data.note??'',200),status:'Received',saleId:'',noCharge:false,created:now,createdBy:u.id,history:[{status:'Received',at:now,by:u.id}]};
   }
+  if(more){const r=more(args);if(r)return r}
   fail('Unknown record type');
  }
-};
+});
+
+const mobileSeed=()=>({
+  grocery_items:[
+   {id:'ph1',name:'iPhone 15 128GB',barcode:'',category:'Phones',unit:'piece',price:299900,cost:0,minStock:1,serial:true,warrantyMonths:12},
+   {id:'ph2',name:'Samsung Galaxy A55 256GB',barcode:'',category:'Phones',unit:'piece',price:139900,cost:0,minStock:1,serial:true,warrantyMonths:12},
+   {id:'ph3',name:'Redmi 13C 128GB',barcode:'',category:'Phones',unit:'piece',price:44900,cost:0,minStock:2,serial:true,warrantyMonths:12},
+   {id:'us1',name:'Used phone',barcode:'',category:'Used phones',unit:'piece',price:50000,cost:0,minStock:0,serial:true,warrantyMonths:1,openPrice:true},
+   {id:'ac1',name:'Tempered glass',barcode:'',category:'Cases & protectors',unit:'piece',price:2500,cost:0,minStock:20},
+   {id:'ac2',name:'Silicone case',barcode:'',category:'Cases & protectors',unit:'piece',price:3500,cost:0,minStock:20},
+   {id:'ac3',name:'20W fast charger',barcode:'',category:'Chargers & cables',unit:'piece',price:5900,cost:0,minStock:10,warrantyMonths:6},
+   {id:'ac4',name:'USB-C cable 1m',barcode:'',category:'Chargers & cables',unit:'piece',price:2500,cost:0,minStock:20},
+   {id:'ac5',name:'Wireless earbuds',barcode:'',category:'Audio',unit:'piece',price:9900,cost:0,minStock:5,warrantyMonths:6},
+   {id:'pt1',name:'iPhone screen (compatible)',barcode:'',category:'Parts',unit:'piece',price:25000,cost:0,minStock:2,openPrice:true},
+   {id:'pt2',name:'Battery (compatible)',barcode:'',category:'Parts',unit:'piece',price:9000,cost:0,minStock:3,openPrice:true},
+   {id:'sv1',type:'service',serviceType:'repair',name:'Repair labour',barcode:'',category:'Repair services',unit:'piece',price:5000,cost:0,minStock:0,duration:60,openPrice:true},
+   {id:'sv2',type:'service',serviceType:'recharge',name:'Mobile recharge',barcode:'',category:'SIM & recharge',unit:'piece',price:1000,cost:0,minStock:0,duration:5,openPrice:true},
+   {id:'sv3',type:'service',serviceType:'sim',name:'New SIM card',barcode:'',category:'SIM & recharge',unit:'piece',price:5500,cost:0,minStock:0,duration:10,openPrice:true}
+  ],
+  staff:[{id:'t1',name:'Sales 1'}],
+  grocery_stock:[],grocery_payments:[],grocery_config:[{id:'config',scale:{...SCALE_DEFAULT},branches:[{id:'main',name:'Main shop'}]}],
+  mobile_units:[],mobile_repairs:[],mobile_buys:[]
+ });
+export const mobile=serialShop({type:'mobile',label:'Mobile shop',categories:MOBILE_CATEGORIES,serviceTypes:['repair','recharge','sim','other'],seed:mobileSeed});

@@ -23,7 +23,8 @@ export const DEMO_SHOPS={
  perfume:{slug:'demo-perfume',name:'Oud House Perfumes',blurb:'Oils by tola/ml, custom blends, loyalty points, branches'},
  meat:{slug:'demo-meat',name:'Al Noor Butchery',blurb:'Label scale, cutting options, carcass yield, Eid pre-orders'},
  mobile:{slug:'demo-mobile',name:'Smart Zone Mobiles',blurb:'IMEI tracking, warranty, repair job cards, used phones & trade-in'},
- tailor:{slug:'demo-tailor',name:'Noor Abayas & Tailoring',blurb:'Stitching orders, measurements, ready-made abayas, fabric by the metre'}
+ tailor:{slug:'demo-tailor',name:'Noor Abayas & Tailoring',blurb:'Stitching orders, measurements, ready-made abayas, fabric by the metre'},
+ electronics:{slug:'demo-electronics',name:'Tech Hub Computers',blurb:'Serial numbers & warranty, quotations, repairs, delivery & installation, RMA'}
 };
 const PEOPLE=[['Fatima Al Mansoori','0501234501'],['Ahmed Khan','0551234502'],['Priya Nair','0521234503'],['Omar Haddad','0561234504'],['Sara Ahmed','0501234505'],['John Mathew','0581234506'],['Aisha Rahman','0541234507'],['Mohammed Ali','0501234508'],['Maria Santos','0551234509'],['Rashid Al Suwaidi','0521234510'],['Noura Saeed','0561234511'],['Vikram Patel','0501234512'],['Layla Hassan','0541234513'],['Yusuf Qureshi','0551234514'],['Elena Petrova','0581234515']];
 
@@ -214,6 +215,53 @@ const BUILD={
   order(3,'alteration',[['Replace zip',1,2500,'Black invisible zip']],{stage:0});
   order(5,'stitching',[['Abaya',1,17000,'Kimono sleeves, piping in gold','fb1',3.75]],{advance:10000,stage:0});
  },
+ electronics(c,cust){
+  c.put('staff','t1',{name:'Sales Faisal'});c.put('staff','t2',{name:'Technician Arif'});c.put('staff','t3',{name:'Installer Sunil'});
+  const B={branch:'main'},sn=()=>c.pick(['5CD','PF4','SN','CN0','R9'])+String(c.int(100000,999999))+c.pick(['X','K','Q','Z'])+String(c.int(10,99)),units={};
+  for(const [id,n,cost] of [['lp1',14,185000],['lp2',14,142000],['mn1',16,31000],['tv1',10,121000],['pr1',10,49000]]){c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost,supplier:'Jumbo Distribution',invoice:'JD-'+c.int(1000,9999),...B,at:at(DAYS,9)});units[id]=Array.from({length:n},()=>c.put('mobile_units',uid(),{itemId:id,imei:sn(),status:'in',cost,...B,at:at(DAYS,9)}).id)}
+  for(const [id,n] of [['c1',30],['c2',30],['c3',80],['c4',24],['c5',30],['c6',30],['s1',70],['n1',50],['p1',160],['k1',260],['pt1',10],['pt2',12]])c.put('grocery_stock',uid(),{type:'in',itemId:id,qty:n,cost:c.get('grocery_items',id).price*0.72|0,supplier:'Al Khoory Computer Trading',...B,at:at(DAYS,10)});
+  const sell=(id,date,customerId,more=[])=>{const u=units[id].shift();if(!u)return;const s=c.sale([{id,qty:1,options:[{id:u}]},...more],{date,customerId,method:c.pick(['Cash','Card (external terminal)','Card (external terminal)']),extra:B});c.put('mobile_units',u,{status:'sold',saleId:s.id});return s};
+  for(let d=DAYS-1;d>=1;d--){
+   for(let k=0;k<perDay(c,d,4);k++)c.sale(Array.from({length:c.int(1,2)},()=>({id:c.pick(['k1','k1','p1','p1','n1','s1','c3']),qty:c.int(1,2)})),{date:at(d,c.int(10,22),c.int(0,59)),customerId:c.r()<.2?c.pick(cust):'',extra:B});
+   if(c.r()<.55)sell(c.pick(['lp1','lp2','mn1','mn1','tv1','pr1']),at(d,c.int(11,21),c.int(0,59)),c.pick(cust),c.r()<.5?[{id:'k1',qty:1}]:[]);
+   if(d%6===0)c.sale([{id:'c1',qty:1},{id:'c2',qty:1},{id:'c3',qty:2},{id:'s1',qty:1},{id:'c5',qty:1},{id:'c6',qty:1},{id:'sv4',qty:1,price:15000}],{date:at(d,17),customerId:c.pick(cust),method:'Card (external terminal)',extra:B});
+  }
+  // a company customer buying on account with an LPO
+  const co=c.put('customers',uid(),{name:'Gulf Star Trading LLC',phone:'043334455',dob:'',trn:'100234567890003',address:'Office 1204, Business Bay, Dubai'}).id;
+  for(const [d,lpo] of [[9,'LPO-2231'],[3,'LPO-2260']]){const a=units.lp2.shift(),b=units.mn1.shift();if(a&&b){const s=c.sale([{id:'lp2',qty:1,options:[{id:a}]},{id:'mn1',qty:1,options:[{id:b}]},{id:'p1',qty:1}],{date:at(d,12),method:'Credit (account)',customerId:co,extra:{...B,lpo}});c.put('mobile_units',a,{status:'sold',saleId:s.id});c.put('mobile_units',b,{status:'sold',saleId:s.id})}}
+  c.put('grocery_payments',uid(),{customerId:co,amount:200000,method:'Card (external terminal)',note:'Bank transfer · LPO-2231',at:at(4,11)});
+  // used laptop bought from a customer
+  for(const [d,cond,paid,ask,seller] of [[10,'Dell Latitude 5420 i5 16GB · good',70000,99000,'Ravi Kumar'],[3,'MacBook Air M1 8GB · battery 84%',160000,205000,'Hassan Ali']]){const code=sn(),when=at(d,12),b=c.put('mobile_buys',uid(),{seller,phone:'05'+c.int(10000000,99999999),idType:'Emirates ID',idNumber:'784-19'+c.int(80,99)+'-'+c.int(1000000,9999999)+'-'+c.int(1,9),itemId:'us1',imei:code,condition:cond,price:paid,method:'Cash',at:when});c.put('mobile_units',uid(),{itemId:'us1',imei:code,status:'in',cost:paid,source:'used',buyId:b.id,condition:cond,price:ask,...B,at:when});c.put('grocery_stock',uid(),{type:'in',itemId:'us1',qty:1,cost:paid,supplier:seller,...B,at:when})}
+  // repairs
+  const job=(daysAgo,device,fault,est,steps=[],bill)=>{const id=uid();c.put('mobile_repairs',id,{status:'Received',customerId:c.pick(cust),device,imei:c.r()<.6?sn():'',fault,accessories:c.pick(['Charger','','Bag and charger']),estimate:est,due:addDays(uaeDay(),2-daysAgo),technician:'Technician Arif'});for(const st of steps)c.put('mobile_repairs',id,{status:st,diagnosis:fault+' fixed'});if(bill){const r=c.get('mobile_repairs',id),s=c.sale(bill,{date:at(Math.max(0,daysAgo-1),18),customerId:r.customerId,extra:B});c.put('mobile_repairs',id,{status:'Delivered',saleId:s.id})}};
+  job(6,'HP Pavilion 15','Broken screen',45000,['Repairing','Ready'],[{id:'sv1',qty:1,price:10000},{id:'pt1',qty:1,price:35000}]);
+  job(3,'Dell Inspiron 14','Battery not charging',28000,['Diagnosing','Repairing','Ready']);
+  job(1,'Custom gaming PC','No display, beeps on start',15000,['Diagnosing']);
+  job(1,'Lenovo ThinkPad T14','Keyboard keys not working',22000,['Waiting for parts']);
+  job(0,'Epson printer','Paper jam, lines on print',10000);
+  // quotations
+  const quote=(daysAgo,customerId,title,lines,discount,close)=>{const q=c.put('elec_quotes',uid(),{status:'Open',customerId,title,lines:lines.map(([itemId,qty,price],k)=>({key:'l'+k,itemId,qty,...(price?{price}:{})})),discount,validUntil:addDays(uaeDay(),14-daysAgo),note:'Delivery in 2 days · payment on delivery'});if(close)c.put('elec_quotes',q.id,close(q));return q};
+  quote(1,cust[1],'Gaming PC build',[['c1',1],['c2',1],['c3',2],['c4',1],['s1',1],['c5',1],['c6',1],['sv4',1,15000]],10000);
+  quote(2,co,'10 office workstations',[['c1',10],['c2',10],['c3',10],['s1',10],['c5',10],['c6',10],['p1',10],['sv4',10,10000]],150000);
+  quote(0,cust[3],'Home office setup',[['n1',1],['p1',1],['k1',2],['sv2',1,20000]],0);
+  quote(8,cust[4],'Budget editing PC',[['c1',1],['c2',1],['c3',1],['s1',1],['c5',1],['c6',1]],5000,()=>({status:'Lost',lostReason:'Bought online'}));
+  const won=c.sale([{id:'c1',qty:1},{id:'c2',qty:1},{id:'c3',qty:2},{id:'s1',qty:2},{id:'c5',qty:1},{id:'c6',qty:1},{id:'sv4',qty:1,price:15000}],{date:at(5,16),customerId:cust[2],off:8000,extra:B});
+  quote(7,cust[2],'Office PC with 2TB storage',[['c1',1],['c2',1],['c3',2],['s1',2],['c5',1],['c6',1],['sv4',1,15000]],8000,()=>({status:'Accepted',saleId:won.id}));
+  // delivery & installation jobs
+  const visit=(dayIn,type,what,staff,charge,steps=[],slot='4–6 pm')=>{const id=uid(),cu=c.get('customers',cust[(dayIn+7)%cust.length]);c.put('elec_jobs',id,{status:'Booked',type,customerId:cu.id,address:c.pick(['Villa 14, Mirdif','Apt 803, Marina Heights, Dubai Marina','Office 210, Al Garhoud','Flat 5, Al Nahda 2','Villa 7, Al Barsha 2']),date:addDays(uaeDay(),dayIn),slot,what,staff,charge});for(const st of steps)c.put('elec_jobs',id,{status:st})};
+  visit(-3,'Delivery & installation','Wall-mount 55" TV and tune channels','Installer Sunil',15000,['On the way','Done'],'10–12 am');
+  visit(-1,'Installation','Set up printer and Wi-Fi on 3 laptops','Technician Arif',10000,['Done']);
+  visit(0,'Delivery & installation','Deliver gaming PC, set up at home','Installer Sunil',10000,['On the way'],'2–4 pm');
+  visit(0,'Delivery','Deliver 2 monitors','Installer Sunil',3000,[],'6–8 pm');
+  visit(1,'Installation','Install Wi-Fi router and 2 access points','Technician Arif',25000);
+  visit(3,'Delivery & installation','Wall-mount 55" TV','Installer Sunil',15000,[],'10–12 am');
+  // warranty claims with suppliers
+  const claim=(item,serial,fault,supplier,customerId,steps=[])=>{const id=uid();c.put('elec_rma',id,{status:'Open',supplier,item,serial,fault,customerId,note:'With box'});for(const st of steps)c.put('elec_rma',id,st)};
+  claim('24" IPS monitor 100Hz',sn(),'Dead pixels in the corner','Jumbo Distribution',cust[5],[{status:'Sent',ref:'RMA-55120'}]);
+  claim('RTX 4060 8GB graphics card',sn(),'Artifacts on screen, crashes','Al Khoory Computer Trading',cust[0],[{status:'Sent',ref:'AK-9917'},{status:'Back',outcome:'Replaced',newSerial:sn()}]);
+  claim('HP 15 laptop i5 16GB 512GB',sn(),'Does not power on','HP service centre',cust[6]);
+  claim('Wi-Fi 6 router','','Dead on arrival','Al Khoory Computer Trading','',[{status:'Sent',ref:'AK-9950'},{status:'Back',outcome:'Credit note'},{status:'Closed'}]);
+ },
 };
 
 // One restaurant order: table/takeaway/delivery, a kitchen ticket and (unless left open) the paid bill.
@@ -243,7 +291,7 @@ export function topUp(db,type){
  const cat=businessModule(type).catalogKind,items=c.list(cat).filter(i=>type==='gym'?i.type==='product':type==='restaurant'?false:!(i.system||i.serial||i.type==='service'&&type!=='salon'&&type!=='petshop'));
  if(type==='restaurant'){for(const t of times.slice(0,3))restaurantRunner(c,cust)(0,c.pick(['dine-in','takeaway']),{opened:new Date(Date.parse(t)-40*60000).toISOString()});return}
  for(const t of times){const lines=[...new Set(Array.from({length:c.int(1,3)},()=>c.pick(items).id))].map(id=>{const it=items.find(x=>x.id===id);return{id,qty:it.unit&&it.unit!=='piece'?(it.unit==='kg'?c.int(5,20)/10:c.int(3,10)):1}});
-  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile','tailor'].includes(type)?{branch:'main'}:{}})}
+  c.sale(lines,{date:t,customerId:c.r()<.6?c.pick(cust):'',extra:['perfume','mobile','tailor','electronics'].includes(type)?{branch:'main'}:{}})}
 }
 
 async function buildOne(db,type){

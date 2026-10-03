@@ -1,5 +1,5 @@
-const CACHE='salon-cloud-shell-v3-35-tailor-shop';
-const FILES=['/whatsapp.js','/','/index.html','/finance.js','/accounts.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/meat.js','/mobile.js','/tailor.js','/billing.js','/staff.js','/extras.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
+const CACHE='salon-cloud-shell-v3-36-electronics-shop';
+const FILES=['/whatsapp.js','/','/index.html','/finance.js','/accounts.js','/cloud.js','/i18n.js','/laundry.js','/gym.js','/charts.js','/grocery.js','/restaurant.js','/petshop.js','/perfume.js','/meat.js','/mobile.js','/tailor.js','/electronics.js','/billing.js','/staff.js','/extras.js','/sync-core.js','/manifest.webmanifest','/icon.svg','/apple-touch-icon.png'];
 // The page decides when it is safe to switch versions (never during an unpaid bill) and then sends 'skipWaiting'.
 self.addEventListener('message',event=>{if(event.data==='skipWaiting')self.skipWaiting()});
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));

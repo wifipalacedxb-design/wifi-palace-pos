@@ -1,8 +1,8 @@
 // Demo shop launcher: signs this browser into a shared demo business (owner or staff) with one click.
 (()=>{'use strict';
  const $=id=>document.getElementById(id);
- const ICONS={salon:'💇',laundry:'👔',gym:'🏋️',grocery:'🛒',restaurant:'🍽️',petshop:'🐾',perfume:'🧴',meat:'🥩',mobile:'📱',tailor:'🧵'};
- const LABELS={salon:'Salon & spa',laundry:'Laundry',gym:'Gym & fitness',grocery:'Grocery & baqala',restaurant:'Restaurant & café',petshop:'Pet shop',perfume:'Perfume & oud',meat:'Meat shop',mobile:'Mobile shop',tailor:'Tailoring & abaya'};
+ const ICONS={salon:'💇',laundry:'👔',gym:'🏋️',grocery:'🛒',restaurant:'🍽️',petshop:'🐾',perfume:'🧴',meat:'🥩',mobile:'📱',tailor:'🧵',electronics:'💻'};
+ const LABELS={salon:'Salon & spa',laundry:'Laundry',gym:'Gym & fitness',grocery:'Grocery & baqala',restaurant:'Restaurant & café',petshop:'Pet shop',perfume:'Perfume & oud',meat:'Meat shop',mobile:'Mobile shop',tailor:'Tailoring & abaya',electronics:'Electronics & computers'};
  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const say=(text,error)=>{const m=$('message');m.hidden=!text;m.textContent=text||'';m.className='notice'+(error?' error':'')};
  // A real account with changes not yet uploaded must never be replaced by a demo on this device.
